@@ -12,6 +12,8 @@ Elegant, multi-stage research ideation — from literature search to refined, di
 
 </div>
 
+![pipeline](pipeline.png)
+
 ---
 
 ## 🧩 What It Does
@@ -39,100 +41,14 @@ The result is a structured JSON artifact (plus a human‑readable summary) and c
 - Fast Screening: weighted, configurable selection + distinctness thresholds.
 - Parallel Deep Review: reviewer, novelty, and proofreading in parallel with consolidated reports.
 - Web UI: interactive process visualization, multi-session control, and live logs.
-- Reproducible Outputs: JSON + summary.txt with timing and costs; single consolidated LLM log per run.
+- Reproducible Outputs: JSON output with timing and costs; with multiple logs such as multi-round idea refinement and llms conversation could been utilized for future reference.
+
 
 ---
 
-## 🏗️ Architecture
+## 🧭 Pipeline
 
-### 7-Pipeline System
-The system uses a 7-pipeline architecture orchestrated by `ResearchPipelineOrchestrator`:
 
-**Agents (7 specialized components):**
-- **SemanticScholarAgent**: Literature search via Semantic Scholar API
-- **IdeaGenerator**: Core idea generation with Graph-of-Thought reasoning
-- **InternalSelector**: LLM-based idea deduplication and selection  
-- **LiteratureSimilarityAgent**: TF-IDF similarity filtering against literature
-- **ReviewerAgent**: Peer-review style evaluation
-- **NoveltyAgent**: Novelty and significance assessment
-- **Aggregator**: Result consolidation and portfolio analysis
-
-**Pipeline Execution Order:**
-1. **ValidationPipeline**: Pre-generation validation of system components
-2. **LiteratureSearchPipeline**: Paper retrieval via Semantic Scholar API
-3. **IdeaGenerationPipeline**: Idea generation with knowledge graph integration
-4. **InternalSelectionPipeline**: LLM-based deduplication and initial filtering
-5. **ExternalSelectionPipeline**: Literature similarity filtering using TF-IDF
-6. **DetailedReviewPipeline**: Multi-agent review (reviewer + novelty + aggregator)
-7. **FinalSelectionPipeline**: Final ranking and selection of top ideas
-8. **PortfolioAnalysisPipeline**: Portfolio analysis and recommendations
-
-### File Structure
-```
-autonomous-research-agent/
-├── src/
-│   ├── __main__.py                   # Main entry point
-│   ├── main.py                       # Core application logic
-│   ├── ui_launcher.py                # Independent UI system
-│   ├── agents/
-│   │   ├── base_agent.py             # Base agent interface
-│   │   ├── aggregator.py             # Result aggregation
-│   │   ├── idea_generator.py         # Core idea generation
-│   │   ├── internal_selector.py      # LLM-based selection
-│   │   ├── literature_similarity_agent.py  # TF-IDF similarity
-│   │   ├── novelty_agent.py          # Novelty assessment
-│   │   ├── reviewer_agent.py         # Peer review
-│   │   ├── semantic_scholar_agent.py # Literature search
-│   │   └── idea_gen/                 # Idea generation modules
-│   │       ├── base_agent.py         # Base agent for idea gen
-│   │       ├── graph_of_thought.py   # GoT reasoning
-│   │       ├── faceted_decomposition.py  # Multi-faceted analysis
-│   │       └── planning_module.py    # Strategic planning
-│   ├── pipelines/
-│   │   ├── research_pipeline_orchestrator.py  # Main orchestrator
-│   │   ├── base_pipeline.py          # Pipeline interface
-│   │   ├── validation_pipeline.py    # System validation
-│   │   ├── literature_search_pipeline.py
-│   │   ├── idea_generation_pipeline.py
-│   │   ├── internal_selection_pipeline.py
-│   │   ├── external_selection_pipeline.py
-│   │   ├── detailed_review_pipeline.py
-│   │   ├── final_selection_pipeline.py
-│   │   └── portfolio_analysis_pipeline.py
-│   ├── prompts/                      # All prompt templates
-│   │   ├── interface_prompts.py      # Interface prompts
-│   │   ├── literature_search/        # Literature search prompts
-│   │   │   └── semantic_scholar_agent_prompts.py
-│   │   ├── idea_generation/          # Idea generation prompts
-│   │   │   ├── idea_generator_prompts.py
-│   │   │   ├── faceted_decomposition_prompts.py
-│   │   │   ├── kg_builder_prompts.py
-│   │   │   └── planning_module_prompts.py
-│   │   ├── selection/                # Selection prompts
-│   │   │   └── idea_selector_prompts.py
-│   │   └── detailed_review/          # Review prompts
-│   │       ├── reviewer_agent_prompts.py
-│   │       └── novelty_agent_prompts.py
-│   ├── knowledge_graph/
-│   │   ├── kg_builder.py             # Knowledge graph construction
-│   │   └── graph_utils.py            # Graph utilities
-│   └── utils/
-│       ├── async_utils.py            # Async utilities
-│       ├── config.py                 # Configuration management
-│       ├── debug_logger.py           # Logging system
-│       ├── llm_interface.py          # LLM client
-│       ├── phase_timer.py            # Performance tracking
-│       ├── pregen_validation.py      # Pre-generation validation
-│       ├── session_manager.py        # Session management
-│       ├── text_utils.py             # Text processing utilities
-│       ├── token_cost_tracker.py     # Token and cost tracking
-│       └── web_ui.py                 # Gradio interface
-├── configs/
-│   └── agent_config.yaml             # Configuration
-└── outputs/, logs/, llm_logs/, idea_logs/, sessions/ (runtime)
-```
-
-### Pipeline Flow
 1. **Literature Search** → Academic paper retrieval (50 papers are good enough to generate mid-to-high-quality ideas)
 2. **Knowledge Graph Construction** → Build topic-anchored knowledge graph from literature
 3. **Idea Generation** → Multi-method idea generation (planning + faceted decomposition + GoT reasoning + variants + self-critique)
@@ -141,13 +57,6 @@ autonomous-research-agent/
 6. **Detailed Review** → Multi-agent evaluation (reviewer + novelty)
 7. **Final Selection** → Top idea ranking
 8. **Portfolio Analysis** → Summary and recommendations
-
-
----
-
-## 🧭 Pipeline
-
-![pipeline](pipeline.png)
 
 ---
 
@@ -218,5 +127,3 @@ python -m src.ui_launcher --process-ui --process-port 7861
 
 - Always run as a module: `python -m src ...` (avoid `python src/main.py`).
 - Ensure write permissions for `outputs/`, `logs/`, and `llm_logs/`.
-
- 
