@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🔬 Autonomous Research Agent
+# 🔬 AutoResearcher: Automating Knowledge-Grounded and Transparent Research Ideation with Multi-Agent Collaboration
 
 Elegant, multi-stage research ideation — from literature search to refined, distinct, well‑reviewed ideas — with clear logs, reproducible outputs, and a minimal setup.
 
@@ -9,7 +9,9 @@ Elegant, multi-stage research ideation — from literature search to refined, di
 <img src="https://img.shields.io/badge/Python-3.8%2B-3776AB?logo=python&logoColor=white" alt="Python" />
 <img src="https://img.shields.io/badge/Status-Active-34C759" alt="Status" />
 <img src="https://img.shields.io/badge/Interface-CLI%20%26%20Web%20UI-8E8E93" alt="Interface" />
-
+<a href="https://arxiv.org/abs/2510.20844" target="_blank">
+  <img src="https://img.shields.io/badge/arXiv-2510.20844-b31b1b?logo=arxiv&logoColor=white" alt="arXiv Paper" />
+</a>
 </div>
 
 ![pipeline](pipeline.png)
@@ -31,35 +33,6 @@ The result is a structured JSON artifact (plus a human‑readable summary) and c
 
 ---
 
- 
-
-## ✨ Key Features
-
-- Literature‑Guided Pipeline: high‑signal retrieval before ideation, with sensible defaults and backoffs.
-- Knowledge Graph Memory: lightweight `networkx` graph from topic (optionally from documents) to ground downstream reasoning.
-- Robust Generation: planning + faceted decomposition + exploration variants + self‑critique with de‑duplication.
-- Fast Screening: weighted, configurable selection + distinctness thresholds.
-- Parallel Deep Review: reviewer, novelty, and proofreading in parallel with consolidated reports.
-- Web UI: interactive process visualization, multi-session control, and live logs.
-- Reproducible Outputs: JSON output with timing and costs; with multiple logs such as multi-round idea refinement and llms conversation could been utilized for future reference.
-
-
----
-
-## 🧭 Pipeline
-
-
-1. **Literature Search** → Academic paper retrieval (50 papers are good enough to generate mid-to-high-quality ideas)
-2. **Knowledge Graph Construction** → Build topic-anchored knowledge graph from literature
-3. **Idea Generation** → Multi-method idea generation (planning + faceted decomposition + GoT reasoning + variants + self-critique)
-4. **Internal Selection** → LLM deduplication and filtering
-5. **External Selection** → TF-IDF / Embedding-based similarity against literature
-6. **Detailed Review** → Multi-agent evaluation (reviewer + novelty)
-7. **Final Selection** → Top idea ranking
-8. **Portfolio Analysis** → Summary and recommendations
-
----
-
 ## ⚙️ Installation
 
 Requirements
@@ -76,6 +49,32 @@ pip install -e .
 Configure your credentials in `configs/custom_pipeline_example.yaml` and rename to `agent_config.yaml`:
 
 ---
+
+## ✨ Key Features & Pipeline
+
+AutoResearcher integrates a fully literature-aware, multi-agent workflow that bridges retrieval, reasoning, and review — ensuring both novelty and evidence grounding.
+
+### 🔑 Key Features
+
+- **Literature-Guided Pipeline** – high-signal retrieval before ideation, with concurrency, sensible defaults, and adaptive backoffs.  
+- **Knowledge Graph Memory** – lightweight `networkx` graph built from the topic (optionally from uploaded documents) to anchor downstream reasoning.  
+- **Robust Generation** – planning + faceted decomposition + Graph-of-Thought (GoT) exploration + self-critique with automatic de-duplication.  
+- **Fast Screening** – weighted, configurable selection with distinctness thresholds.  
+- **Parallel Deep Review** – reviewer, novelty, and proofreading agents run in parallel and produce consolidated evaluations.  
+- **Web UI** – interactive visualization of the end-to-end process with multi-session control and live logs.  
+- **Reproducible Outputs** – structured JSON results with timing and cost tracking, plus logs for multi-round refinement and LLM conversation replay.
+
+---
+
+### 🧭 Pipeline Overview
+
+1. **Structured Knowledge Curation** → LLM-guided topic decomposition, Semantic Scholar retrieval, and incremental KG construction.  (Implementation: Literature Search + Knowledge Graph Construction)
+2. **Diversified Idea Generation** → Planning + Graph-of-Thought reasoning + multi-strategy idea variants + iterative self-refinement.  (Implementation: Idea Generation)
+3. **Multi-Stage Idea Selection** → Weighted internal scoring and external embedding-based filtering.  (Implementation: Internal + External Selection)
+4. **Expert Panel Review & Synthesis** → Reviewer and novelty agents score and synthesize final ideas into a ranked portfolio. (Implementation: Detailed Review + Final Selection + Portfolio Analysis)
+
+---
+
 
 ## 🖼️ Case Study: Web UI in Action
 
@@ -127,3 +126,20 @@ python -m src.ui_launcher --process-ui --process-port 7861
 
 - Always run as a module: `python -m src ...` (avoid `python src/main.py`).
 - Ensure write permissions for `outputs/`, `logs/`, and `llm_logs/`.
+
+
+## 📚 Citation
+
+If you find this work useful, please cite our paper:
+
+```bibtex
+@misc{zhou2025autoresearcher,
+      title        = {{\textsc{AutoResearcher}}: Automating Knowledge-Grounded and Transparent Research Ideation with Multi-Agent Collaboration},
+      author       = {Jiawei Zhou and Ruicheng Zhu and Mengshi Chen and Jianwei Wang and Kai Wang},
+      year         = {2025},
+      eprint       = {2510.20844},
+      archivePrefix= {arXiv},
+      primaryClass = {cs.MA},
+      url          = {https://arxiv.org/abs/2510.20844}
+}
+```
