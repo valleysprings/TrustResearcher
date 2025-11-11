@@ -1,4 +1,4 @@
-agent_name: "Autonomous Research Agent"
+agent_name: "TrustResearcher"
 version: "1.0"
 
 # LLM Configuration

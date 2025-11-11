@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Autonomous Research Agent Main Module
+TrustResearcher Main Module
 
 This implements a comprehensive research pipeline with the following methodology:
 - Orchestrated 7-phase pipeline architecture
@@ -25,10 +25,10 @@ from .utils.phase_timer import PhaseTimer
 
 
 async def main():
-    """Main function that orchestrates the autonomous research agent using the pipeline architecture"""
+    """Main function that orchestrates the TrustResearcher using the pipeline architecture"""
     
     # Parse command line arguments
-    parser = argparse.ArgumentParser(description='Autonomous Research Agent - Orchestrated Pipeline')
+    parser = argparse.ArgumentParser(description='TrustResearcher - Orchestrated Pipeline')
     parser.add_argument('--topic', type=str, required=False, 
                        help='Seed topic for research idea generation')
     parser.add_argument('--num_ideas', type=int, default=3,
@@ -79,7 +79,7 @@ async def main():
     reset_global_session_stats()
     
     # Print startup information
-    print("Autonomous Research Agent - Orchestrated Pipeline Architecture")
+    print("TrustResearcher - Orchestrated Pipeline Architecture")
     print("=" * 60)
     if args.debug:
         print("DEBUG MODE ENABLED - Comprehensive logging active")
@@ -151,7 +151,7 @@ async def main():
             
             logger.finalize_session()
             logger.log_info(f"Orchestrated research pipeline completed successfully in {total_time:.2f} seconds")
-            print(f"\nAutonomous Research Agent completed successfully!")
+            print(f"\nTrustResearcher completed successfully!")
             
         else:
             print(f"\nPipeline execution failed: {execution_result['error']}")

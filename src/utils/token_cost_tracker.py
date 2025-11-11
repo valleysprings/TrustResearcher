@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Token Cost Tracker for Autonomous Research Agent
+Token Cost Tracker for TrustResearcher
 
 Provides precise token counting and cost calculation for LLM invocations using tokencost library.
 Integrates with the existing logging system to track token usage and costs per agent and session.

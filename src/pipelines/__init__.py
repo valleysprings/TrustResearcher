@@ -1,5 +1,5 @@
 """
-Pipeline Architecture for Autonomous Research Agent
+Pipeline Architecture for TrustResearcher
 
 This module defines the core pipeline interfaces and implementations
 for the multi-stage research idea generation and evaluation system.
