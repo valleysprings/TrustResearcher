@@ -128,7 +128,7 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
-# Autonomous Research Agent Specific
+# TrustResearcher Specific
 # ===================================
 
 # Log files and directories

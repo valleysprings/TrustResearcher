@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Web UI for Autonomous Research Agent Process Visualization
+Web UI for TrustResearcher Process Visualization
 
 Provides real-time visualization of the research agent's execution phases,
 idea generation progress, and final results through a clean Gradio interface.
@@ -293,11 +293,11 @@ class ProcessVisualizerUI:
         }
         """
 
-        with gr.Blocks(title="AutoResearcher", theme=gr.themes.Soft(), css=custom_css) as interface:
+        with gr.Blocks(title="TrustResearcher", theme=gr.themes.Soft(), css=custom_css) as interface:
             # Theme toggle button at the top right
             with gr.Row():
                 with gr.Column(scale=10):
-                    gr.Markdown("# 🔬 AutoResearcher")
+                    gr.Markdown("# 🔬 TrustResearcher")
                 with gr.Column(scale=1, min_width=150):
                     theme_toggle = gr.Button("🌙 Dark Mode", elem_id="theme-toggle-btn", size="sm")
 
@@ -841,9 +841,6 @@ class ProcessVisualizerUI:
         # Format status based on session state
         if session_status:
             status_text = f"{session_status.get('status', 'unknown').title()} - {session_id}"
-            if session_status.get('status') == 'completed':
-                duration = session_status.get('duration', 0)
-                status_text += f" (completed in {duration:.0f}s)"
         else:
             status_text = f"Active - {session_id}"
         
@@ -986,8 +983,7 @@ class ProcessVisualizerUI:
 
             # Format status text
             if status == 'completed':
-                duration = session_status.get('duration', 0)
-                status_text = f"Completed - {self.current_session_id} (in {duration:.0f}s)"
+                status_text = f"Completed - {self.current_session_id}"
             elif status == 'running':
                 status_text = f"Running - {self.current_session_id}"
             else:

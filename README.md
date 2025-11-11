@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🔬 AutoResearcher: Automating Knowledge-Grounded and Transparent Research Ideation with Multi-Agent Collaboration
+# 🔬 TrustResearcher: Automating Knowledge-Grounded and Transparent Research Ideation with Multi-Agent Collaboration
 
 Elegant, multi-stage research ideation — from literature search to refined, distinct, well‑reviewed ideas — with clear logs, reproducible outputs, and a minimal setup.
 
@@ -20,7 +20,7 @@ Elegant, multi-stage research ideation — from literature search to refined, di
 
 ## 🧩 What It Does
 
-The Autonomous Research Agent takes a topic and produces a polished set of research ideas by orchestrating a practical, literature‑aware pipeline:
+The TrustResearcher takes a topic and produces a polished set of research ideas by orchestrating a practical, literature‑aware pipeline:
 
 - Retrieves relevant papers via the Semantic Scholar API with concurrency, rate‑limiting, retries, de‑duplication, and relevance/citation ranking.
 - Builds a topic‑anchored knowledge graph to maintain external memory during ideation.
@@ -39,7 +39,7 @@ Requirements
 - Python 3.8+
 - Network access for the model API and Semantic Scholar
 
-*Tip: use a virtual environment (venv or conda) to isolate dependencies.*
+*Tip: use a virtual environment (conda for example) to isolate dependencies.*
 
 Install
 ```bash
@@ -52,7 +52,7 @@ Configure your credentials in `configs/custom_pipeline_example.yaml` and rename 
 
 ## ✨ Key Features & Pipeline
 
-AutoResearcher integrates a fully literature-aware, multi-agent workflow that bridges retrieval, reasoning, and review — ensuring both novelty and evidence grounding.
+TrustResearcher integrates a fully literature-aware, multi-agent workflow that bridges retrieval, reasoning, and review — ensuring both novelty and evidence grounding.
 
 ### 🔑 Key Features
 
@@ -134,7 +134,7 @@ If you find this work useful, please cite our paper:
 
 ```bibtex
 @misc{zhou2025autoresearcher,
-      title        = {{\textsc{AutoResearcher}}: Automating Knowledge-Grounded and Transparent Research Ideation with Multi-Agent Collaboration},
+      title        = {{\textsc{TrustResearcher}}: Automating Knowledge-Grounded and Transparent Research Ideation with Multi-Agent Collaboration},
       author       = {Jiawei Zhou and Ruicheng Zhu and Mengshi Chen and Jianwei Wang and Kai Wang},
       year         = {2025},
       eprint       = {2510.20844},

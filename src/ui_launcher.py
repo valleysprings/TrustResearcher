@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Autonomous Research Agent - UI Launcher
+TrustResearcher - UI Launcher
 
 Lightweight launcher for research process visualization interface:
 1. Research process visualization interface
@@ -43,7 +43,7 @@ def launch_process_ui(config_path: str = 'configs/agent_config.yaml',
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Autonomous Research Agent - UI Launcher",
+        description="TrustResearcher - UI Launcher",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__
     )
@@ -66,7 +66,7 @@ def main():
     
     try:
         print("=" * 60)
-        print("🤖 Autonomous Research Agent - UI Launcher")
+        print("🤖 TrustResearcher - UI Launcher")
         print("=" * 60)
         
         if args.process_ui:

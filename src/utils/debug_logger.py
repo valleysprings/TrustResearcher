@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Debug Logger for Autonomous Research Agent
+Debug Logger for TrustResearcher
 
 Provides comprehensive logging in a single consolidated file per session with line numbers
 """
