@@ -4,8 +4,7 @@ TrustResearcher - UI Launcher
 
 Lightweight launcher for research process visualization interface:
 1. Research process visualization interface
-2. Multi-session support
-3. Interactive research management
+2. Interactive research management
 
 Usage:
     python -m src.ui_launcher --process-ui     # Launch research process visualization
@@ -13,20 +12,23 @@ Usage:
 
 import argparse
 import sys
-from pathlib import Path
 
 from .utils.web_ui import ProcessVisualizerUI
 from .utils.config import load_config
 
 
-def launch_process_ui(config_path: str = 'configs/agent_config.yaml', 
+def launch_process_ui(config_dir: str = 'configs/',
                      port: int = 7860, share: bool = False, host: str = 'localhost'):
     """Launch the research process visualization UI (host configurable)"""
     print(f"🚀 Starting Research Process Visualization UI...")
     print(f"💡 Tip: UI will automatically find available port if {port} is occupied")
-    
+
     try:
-        config = load_config(config_path) if Path(config_path).exists() else {}
+        try:
+            config = load_config(config_dir)
+        except (FileNotFoundError, ValueError) as e:
+            print(f"Warning: Could not load config: {e}")
+            config = {}
         ui = ProcessVisualizerUI(config=config, port=port, share=share, host=host)
         ui.launch()
     except KeyboardInterrupt:
@@ -59,8 +61,8 @@ def main():
                     help='Research process UI host (default: localhost; use 0.0.0.0 for LAN)')
     parser.add_argument('--share', action='store_true',
                        help='Create public Gradio links')
-    parser.add_argument('--config', type=str, default='configs/agent_config.yaml',
-                       help='Configuration file path')
+    parser.add_argument('--config', type=str, default='configs/',
+                       help='Configuration directory path')
     
     args = parser.parse_args()
     
@@ -71,7 +73,7 @@ def main():
         
         if args.process_ui:
             return launch_process_ui(
-                config_path=args.config,
+                config_dir=args.config,
                 port=args.process_port,
                 share=args.share,
                 host=args.process_host

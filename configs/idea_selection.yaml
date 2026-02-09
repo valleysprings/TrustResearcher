@@ -1,0 +1,56 @@
+# Internal Selector Configuration
+internal_selector:
+  selection_criteria:
+    novelty:
+      weight: 0.30
+      description: "Originality and uniqueness of research direction"
+    feasibility:
+      weight: 0.25
+      description: "Realistic implementation given current resources"
+    clarity:
+      weight: 0.20
+      description: "Clear problem definition and approach"
+    impact:
+      weight: 0.25
+      description: "Potential significance and broad applicability"
+  batch_size: 50  # Number of ideas to evaluate in parallel
+  min_diversity_threshold: 0.3  # Minimum diversity threshold between selected ideas
+  # Merging settings
+  default_merge_threshold: 0.85  # Default Jaccard similarity threshold for merging
+  sentence_dedup_threshold: 0.7  # Threshold for sentence deduplication when merging
+  max_merge_iterations: 20  # Maximum iterations for idea merging
+  initial_multiplier: 3  # Multiplier for initial ideas before merging
+  # Processing limits
+  large_dataset_threshold: 50    # Threshold for switching to efficient algorithm
+  # Scoring fallbacks
+  fallback_scoring:
+    base_score: 3.0              # Base score for fallback evaluation
+    topic_length_modifier: 0.5   # Modifier based on topic length
+  # Content truncation
+  content_limits:
+    problem_statement_length: 200 # Truncate problem statements to this length
+    methodology_length: 200      # Truncate methodology to this length
+    validation_length: 200       # Truncate validation to this length
+  # Retry settings
+  retry:
+    idea_merging_retries: 3      # Max retries for idea merging operations
+
+# External Selector for filtering ideas based on literature distinctness
+external_selector:
+  similarity_threshold: 0.7
+  high_similarity_threshold: 0.8
+  low_similarity_threshold: 0.3
+  similarity_method: "tfidf"  # Options: "tfidf" (default, no extra deps), "bge", "stella", "jina" (requires sentence-transformers)
+  # TF-IDF vectorizer settings
+  tfidf:
+    max_features: 1000
+    stop_words: "english"
+    ngram_range: [1, 2]  # Use 1-grams and 2-grams
+    min_df: 1
+  # Display limits
+  max_similarity_details: 5  # Top N most similar papers to show
+  # Merging settings (used in internal selection)
+  merge_threshold: 0.85  # Jaccard similarity threshold for merging
+  min_diversity_threshold: 0.3  # Minimum diversity threshold between selected ideas
+  max_merge_iterations: 20  # Maximum iterations for idea merging
+  sentence_dedup_threshold: 0.7  # Threshold for sentence deduplication when merging

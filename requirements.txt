@@ -9,3 +9,6 @@ pytest
 pyyaml
 requests
 tokencost
+sentence_transformers
+gradio
+httpx[socks]

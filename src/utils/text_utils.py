@@ -226,6 +226,22 @@ def safe_json_parse(text: str, fallback=None) -> Any:
     except json.JSONDecodeError:
         pass
 
+    # Fix for LLMs that return JSON content without braces
+    # Check if text starts with a quote (indicating a JSON key) but no opening brace
+    if text and text[0] == '"' and '{' not in text[:20]:
+        try:
+            fixed_text = '{' + text + '}'
+            return json.loads(fixed_text)
+        except json.JSONDecodeError:
+            # Try adding closing brace if missing
+            try:
+                fixed_text = '{' + text
+                if not fixed_text.rstrip().endswith('}'):
+                    fixed_text = fixed_text.rstrip().rstrip(',') + '}'
+                return json.loads(fixed_text)
+            except json.JSONDecodeError:
+                pass
+
     # Try to find JSON-like content in the text
     json_patterns = [
         r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}',  # Nested braces
@@ -390,32 +406,6 @@ def parse_fields_from_text(text: str, field_names: List[str]) -> Dict[str, str]:
         fields[field_name] = content
 
     return fields
-
-
-def create_json_prompt_suffix() -> str:
-    """
-    Create a standardized prompt suffix requesting JSON format output
-
-    Returns:
-        String to append to prompts requesting JSON format
-    """
-    return """
-
-IMPORTANT: Please provide your response in valid JSON format only. Use this structure:
-
-{
-  "topic": "Research idea title",
-  "problem_statement": "Clear description of the problem being addressed",
-  "proposed_methodology": "Detailed methodology and approach",
-  "experimental_validation": "Validation strategy and evaluation methods",
-  "additional_fields": {
-    "novelty_score": 4.5,
-    "feasibility_score": 3.8,
-    "needs_refinement": false
-  }
-}
-
-Ensure all text fields are properly escaped for JSON. Do not include any text outside the JSON structure."""
 
 
 def validate_json_response(json_data: Dict[str, Any], required_fields: List[str]) -> Tuple[bool, List[str]]:

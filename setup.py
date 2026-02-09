@@ -2,11 +2,11 @@ from setuptools import setup, find_packages
 
 setup(
     name='autonomous-research-agent',
-    version='1.0',
+    version='1.1',
     author='Jiawei Zhou',
     author_email='davidzjw@sjtu.edu.cn',
     description='An autonomous agent for generating and refining research ideas.',
-    long_description=open('README.md').read(),
+    long_description=open('README.md', encoding='utf-8').read(),
     long_description_content_type='text/markdown',
     url='https://github.com/valleysprings/autonomous-research-agent',
     packages=find_packages(where='src'),

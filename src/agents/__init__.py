@@ -2,32 +2,24 @@
 Agents Package
 
 This package contains all the AI agents used in the autonomous research system:
-- IdeaGenerator: Generates research ideas using Graph-of-Thought reasoning
-- ReviewerAgent: Peer-review style evaluation of ideas
-- NoveltyAgent: Assesses novelty and significance of ideas
-- Aggregator: Synthesizes feedback from multiple agents
-- SemanticScholarAgent: Searches for relevant papers using Semantic Scholar API
-- InternalSelector: Handles internal idea selection and merging
-- ExternalSelector: Selects ideas based on distinctness from existing literature
+- IdeaGenAgent: Orchestrates research idea generation using specialized tools
+- ReviewerAgent: Two-stage peer review (preliminary critique + systematic evaluation)
+- RetrievalAgent: Searches for relevant papers using Semantic Scholar API
+- SelectionAgent: Unified selector for internal (dedupe/merge) and external (literature) selection
 """
 
-from .idea_generator import IdeaGenerator, ResearchIdea
+from .ideagen_agent import IdeaGenAgent
+from .idea_gen.research_idea import ResearchIdea
 from .reviewer_agent import ReviewerAgent
-from .novelty_agent import NoveltyAgent
-from .aggregator import Aggregator
-from .semantic_scholar_agent import SemanticScholarAgent, Paper
-from .external_selector import ExternalSelector, SimilarityResult
-from .internal_selector import InternalSelector
+from .retrieval_agent import RetrievalAgent, Paper
+from .selection_agent import SelectionAgent, SimilarityResult
 
 __all__ = [
-    'IdeaGenerator',
+    'IdeaGenAgent',
     'ResearchIdea',
     'ReviewerAgent',
-    'NoveltyAgent',
-    'Aggregator',
-    'SemanticScholarAgent',
+    'RetrievalAgent',
     'Paper',
-    'ExternalSelector',
-    'SimilarityResult',
-    'InternalSelector'
+    'SelectionAgent',
+    'SimilarityResult'
 ]

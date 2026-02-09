@@ -1,0 +1,82 @@
+# Knowledge Graph Configuration
+knowledge_graph:
+  enabled: true
+  paper_batch_size: 3  # Number of papers to process in each batch for KG insertion
+  default_relationship_weight: 0.8  # Default weight for KG relationships
+  expansion:
+    seed_sample_size: 30  # Increased from 10 to 30 for better coverage
+    sampling_strategy: "degree"
+  relationship_enhancement:
+    sampling_strategy: "degree"
+    sample_size: 50  # Increased from 20 to 50
+    top_degree_ratio: 0.6
+    random_ratio: 0.4
+    iterations: 12  # Increased from 2 to 12 for better coverage
+    # Embedding-based similarity (optional, requires embedding model)
+    enable_embedding_similarity: false
+    embedding_model: "all-MiniLM-L6-v2"  # Lightweight embedding model
+    similarity_threshold: 0.75  # Min cosine similarity to add relationship
+    similarity_batch_size: 100  # Entities to check per batch
+
+# Graph of Thought Configuration - Path Sampling from KG
+graph_of_thought:
+  # Core parameters
+  paths_per_idea: 10                # Number of paths to sample per GoT idea
+  max_paths: 200                    # Maximum reasoning paths to extract
+  max_kg_entities: 20               # Max KG entities to import as thoughts
+  default_thought_score: 0.8        # Default score for thought nodes
+
+  # Entity type diversity (Phase 1 enhancement)
+  entity_type_quotas:
+    methodology: 0.3                # 30% methodologies (techniques, algorithms)
+    concept: 0.4                    # 40% concepts (theoretical ideas)
+    paper: 0.2                      # 20% papers (research works)
+    researcher: 0.05                # 5% researchers (authors)
+    temporal: 0.05                  # 5% temporal (time-related entities)
+
+  # Bridge connections (minimal generation to connect graph)
+  max_bridges_per_facet: 3          # Max bridge connections per facet to KG entities
+  bridge_connection_weight: 0.7     # Weight for bridge connections between facets and KG
+
+  # Path sampling
+  min_path_length: 3                # Minimum path length for valid paths
+  max_path_length: 10               # Maximum path length (number of hops)
+  path_branching_factor: 5          # Number of successors to explore per node in DFS
+  min_path_score: 0.5               # Minimum path quality score for retention
+  max_starting_nodes: 10            # Max KG nodes to use as DFS starting points
+
+  # Path scoring weights (Phase 1 enhancement: adjusted to include edge weights)
+  node_quality_weight: 0.5          # Weight for average node scores (reduced from 0.6)
+  edge_diversity_weight: 0.2        # Weight for edge type diversity
+  path_length_weight: 0.15          # Weight for optimal path length (reduced from 0.2)
+  edge_weight_weight: 0.15          # Weight for edge relationship strength (NEW)
+
+  # Phase 3 enhancement: Coverage-maximizing path sampling
+  path_oversample_factor: 5         # Generate 5x target paths for selection pool
+  diversity_quality_weight: 0.6     # Weight for path quality in diversity selection
+  diversity_coverage_weight: 0.4    # Weight for coverage (new entities/rels) in diversity selection
+  path_overlap_threshold: 0.5       # Max Jaccard overlap between selected paths
+
+  # Thought formatting
+  max_neighbors_per_entity: 5       # Max neighbors to consider when formatting entity
+  max_relationships_display: 3      # Max relationships to show in thought description
+
+  # Content truncation limits
+  facet_content_truncation: 500     # Max characters for facet content
+  thought_content_truncation: 100   # Max characters for thought content display
+
+  # Community detection
+  random_seed: 42                   # Random seed for reproducible community detection
+  max_community_nodes_display: 10   # Max nodes to display per community
+
+  # Community-based path scoring weights
+  community_path_scoring:
+    length_divisor: 8.0             # Divisor for length bonus calculation
+    length_bonus_weight: 0.2        # Weight for length bonus
+    diversity_bonus_weight: 0.1     # Weight per unique thought type
+
+  # Softmax sampling
+  softmax_temperature: 1.0          # Temperature for softmax path sampling (higher = more random)
+
+  # Debug logging (controlled by global logging.level=DEBUG)
+  max_cross_connections_logged: 20  # Max cross-connections to log in debug output

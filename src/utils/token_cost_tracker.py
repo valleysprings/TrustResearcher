@@ -56,26 +56,38 @@ _global_session_stats = {
 class TokenCostTracker:
     """Track token usage and costs for LLM invocations"""
     
-    def __init__(self, model_name: str, logger=None):
+    def __init__(self, model_name: str, logger=None, custom_pricing: Dict[str, float] = None):
         """
         Initialize token cost tracker
-        
+
         Args:
             model_name: Name of the model used for cost calculation
             logger: Debug logger instance for logging costs and metrics
+            custom_pricing: Optional dict with 'prompt' and 'completion' costs per 1M tokens
         """
         self.model_name = model_name
         self.logger = logger
-        
+        self.custom_pricing = custom_pricing
+
+        # If custom pricing provided, use it
+        if custom_pricing:
+            if logger:
+                logger.log_info(
+                    f"Using custom pricing for '{model_name}': "
+                    f"${custom_pricing.get('prompt', 0)}/1M input, "
+                    f"${custom_pricing.get('completion', 0)}/1M output",
+                    "token_tracker"
+                )
+            self.cost_model = model_name
         # Validate model is supported by tokencost
-        if model_name not in tokencost.TOKEN_COSTS:
+        elif model_name not in tokencost.TOKEN_COSTS:
             # Try to find closest match or use default
             available_models = list(tokencost.TOKEN_COSTS.keys())
             if logger:
                 logger.log_warning(f"Model '{model_name}' not found in tokencost. Available models: {available_models[:10]}...")
-            
+
             # Use gpt-4 as fallback for cost calculation
-            self.cost_model = "gpt-4" 
+            self.cost_model = "gpt-4"
             if logger:
                 logger.log_info(f"Using '{self.cost_model}' for cost calculation as fallback", "token_tracker")
         else:
@@ -125,14 +137,21 @@ class TokenCostTracker:
     def calculate_prompt_cost(self, prompt: Union[str, List[Dict]]) -> Decimal:
         """
         Calculate cost for prompt
-        
+
         Args:
             prompt: String prompt or list of message dictionaries
-            
+
         Returns:
             Cost in USD as Decimal
         """
         try:
+            # Use custom pricing if available
+            if self.custom_pricing:
+                token_count = self.count_tokens(prompt, is_messages=isinstance(prompt, list))
+                cost_per_million = Decimal(str(self.custom_pricing.get('prompt', 0)))
+                return (Decimal(token_count) * cost_per_million) / Decimal('1000000')
+
+            # Otherwise use tokencost library
             with warnings.catch_warnings(), suppress_stderr():
                 warnings.filterwarnings("ignore", message=".*may update over time.*")
                 warnings.filterwarnings("ignore", message=".*Returning num tokens assuming.*")
@@ -149,14 +168,21 @@ class TokenCostTracker:
     def calculate_completion_cost(self, completion: str) -> Decimal:
         """
         Calculate cost for completion/response
-        
+
         Args:
             completion: Response text from the model
-            
+
         Returns:
             Cost in USD as Decimal
         """
         try:
+            # Use custom pricing if available
+            if self.custom_pricing:
+                token_count = self.count_tokens(completion, is_messages=False)
+                cost_per_million = Decimal(str(self.custom_pricing.get('completion', 0)))
+                return (Decimal(token_count) * cost_per_million) / Decimal('1000000')
+
+            # Otherwise use tokencost library
             with warnings.catch_warnings(), suppress_stderr():
                 warnings.filterwarnings("ignore", message=".*may update over time.*")
                 warnings.filterwarnings("ignore", message=".*Returning num tokens assuming.*")
@@ -357,6 +383,12 @@ def get_available_models() -> List[str]:
 def is_model_supported(model_name: str) -> bool:
     """Check if a model is supported by tokencost"""
     return model_name in tokencost.TOKEN_COSTS
+
+
+def get_current_token_count() -> int:
+    """Get current total token count from global session stats"""
+    global _global_session_stats
+    return _global_session_stats["total_prompt_tokens"] + _global_session_stats["total_completion_tokens"]
 
 
 def reset_global_session_stats():

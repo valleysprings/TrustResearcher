@@ -312,6 +312,7 @@ CLAUDE.md
 *.bak
 *.backup
 *~
+old*/
 
 # Session files
 sessions/

@@ -2,7 +2,7 @@
 
 # 🔬 TrustResearcher: Automating Knowledge-Grounded and Transparent Research Ideation with Multi-Agent Collaboration
 
-Elegant, multi-stage research ideation — from literature search to refined, distinct, well‑reviewed ideas — with clear logs, reproducible outputs, and a minimal setup.
+Elegant, Multi-Agent Research Ideation Prototype — from literature search to refined, distinct, well‑reviewed ideas — with clear logs, reproducible artifacts, and minimal setups.
 
 <br/>
 
@@ -14,22 +14,31 @@ Elegant, multi-stage research ideation — from literature search to refined, di
 </a>
 </div>
 
-![pipeline](pipeline.png)
+---
+## 📰 News
+
+- **[2026.02.09]** 🎉 Major architecture overhaul with clearer orchestration, improved agent delegation, and modular skill system. Continuous improvements planned with emerging models and methods.
+- **[2026.01.12]** 🏆 Accepted as WWW 2026 Demo Track paper! See you in Dubai.
+- **[2025.11.11]** 📝 Revised paper submission with comprehensive appendix showcasing preliminary results.
+- **[2025.10.20]** 📄 Initial paper submission now available on [arXiv:2510.20844](https://arxiv.org/abs/2510.20844).
+
+
 
 ---
 
-## 🧩 What It Does
+## ✨ Key Features & Pipeline
 
-The TrustResearcher takes a topic and produces a polished set of research ideas by orchestrating a practical, literature‑aware pipeline:
+TrustResearcher integrates a fully literature-aware, multi-agent workflow that bridges retrieval, reasoning, and review — ensuring both novelty and evidence grounding.
 
-- Retrieves relevant papers via the Semantic Scholar API with concurrency, rate‑limiting, retries, de‑duplication, and relevance/citation ranking.
-- Builds a topic‑anchored knowledge graph to maintain external memory during ideation.
-- Over‑generates ideas through planning, faceted decomposition, exploration, and self‑critique, then removes duplicates.
-- Quickly evaluates candidates with weighted criteria and configurable distinctness thresholds.
-- Checks distinctness against retrieved papers to avoid overlap.
-- Runs reviewer, novelty, and proofreading agents in parallel and aggregates results into clean outputs.
+![pipeline](figs/pipeline.png)
 
-The result is a structured JSON artifact (plus a human‑readable summary) and comprehensive logs of the process.
+The research pipeline consists of 5 main phases:
+
+1. **Literature Retrieval** → Semantic Scholar API search to gather relevant papers based on the research topic.
+2. **Idea Generation** → Planning module + literature-informed idea generation with overgeneration for robust filtering.
+3. **Preliminary Selection** → Two-stage filtering: (a) External selection against literature for novelty, (b) Internal deduplication and diversity selection.
+4. **Detailed Review** → Two-stage expert review system that evaluates ideas across multiple criteria (novelty, feasibility, impact, clarity).
+5. **Final Selection** → Score-based ranking and selection of top ideas (≥3.5 threshold) for final output.
 
 ---
 
@@ -38,49 +47,23 @@ The result is a structured JSON artifact (plus a human‑readable summary) and c
 Requirements
 - Python 3.8+
 - Network access for the model API and Semantic Scholar
+- [Optional] Dedicated GPU server for real-time deduplication and KG relationship augmentation (may use preset embedding model)
 
-*Tip: use a virtual environment (conda for example) to isolate dependencies.*
+*Tip: use a virtual environment (venv or conda) to isolate dependencies.*
 
 Install
 ```bash
 pip install -e .
 ```
 
-Configure your credentials in `configs/custom_pipeline_example.yaml` and rename to `agent_config.yaml`:
+**Configure Credentials**
 
----
+Set up your API credentials in the following config files:
+- `configs/llm.yaml` - LLM provider API key (OpenAI, Anthropic, etc.)
+- `configs/literature_search.yaml` - Semantic Scholar API key
 
-## ✨ Key Features & Pipeline
+Other config files (`idea_generation.yaml`, `reviewer.yaml`, etc.) contain pipeline parameters and don't require credentials.
 
-TrustResearcher integrates a fully literature-aware, multi-agent workflow that bridges retrieval, reasoning, and review — ensuring both novelty and evidence grounding.
-
-### 🔑 Key Features
-
-- **Literature-Guided Pipeline** – high-signal retrieval before ideation, with concurrency, sensible defaults, and adaptive backoffs.  
-- **Knowledge Graph Memory** – lightweight `networkx` graph built from the topic (optionally from uploaded documents) to anchor downstream reasoning.  
-- **Robust Generation** – planning + faceted decomposition + Graph-of-Thought (GoT) exploration + self-critique with automatic de-duplication.  
-- **Fast Screening** – weighted, configurable selection with distinctness thresholds.  
-- **Parallel Deep Review** – reviewer, novelty, and proofreading agents run in parallel and produce consolidated evaluations.  
-- **Web UI** – interactive visualization of the end-to-end process with multi-session control and live logs.  
-- **Reproducible Outputs** – structured JSON results with timing and cost tracking, plus logs for multi-round refinement and LLM conversation replay.
-
----
-
-### 🧭 Pipeline Overview
-
-1. **Structured Knowledge Curation** → LLM-guided topic decomposition, Semantic Scholar retrieval, and incremental KG construction.  (Implementation: Literature Search + Knowledge Graph Construction)
-2. **Diversified Idea Generation** → Planning + Graph-of-Thought reasoning + multi-strategy idea variants + iterative self-refinement.  (Implementation: Idea Generation)
-3. **Multi-Stage Idea Selection** → Weighted internal scoring and external embedding-based filtering.  (Implementation: Internal + External Selection)
-4. **Expert Panel Review & Synthesis** → Reviewer and novelty agents score and synthesize final ideas into a ranked portfolio. (Implementation: Detailed Review + Final Selection + Portfolio Analysis)
-
----
-
-
-## 🖼️ Case Study: Web UI in Action
-
-Here’s what the interactive Web UI looks like when running a research session:
-
-![case_study_ui](casestudy.png)
 
 ---
 
@@ -94,9 +77,10 @@ python -m src --help
 
 # full pipeline (ensure configs/agent_config.yaml is set)
 python -m src --topic "Design scalable and robust algorithms for the k-truss breaking problem that bypass global trussness updates via localized, incremental, and approximation methods, enabling near-real-time interventions on large-scale graphs." --num_ideas 2 --debug
+
+python -m src --topic "Design scalable multi-agent systems for automated scientific ideation that replace linear generation with knowledge-graph-driven planning and RL-driven exploration, enabling grounded, explainable, and self-evaluated hypothesis generation via structured reasoning and adversarial peer-review loops, with publishable paper and great insights to the general AI field." --num_ideas 2 --debug
+
 ```
-
-
 
 * Web UI
 
@@ -122,10 +106,23 @@ python -m src.ui_launcher --process-ui --process-port 7861
 
 ---
 
+
+## 🖼️ Case Study: Web UI in Action
+
+Here’s what the interactive Web UI looks like when running a research session:
+
+![case_study_ui](figs/casestudy.png)
+
+
+---
+
+
 ## 🧯 Troubleshooting
 
 - Always run as a module: `python -m src ...` (avoid `python src/main.py`).
-- Ensure write permissions for `outputs/`, `logs/`, and `llm_logs/`.
+- Ensure write permissions for `outputs/`, `logs/`.
+
+---
 
 
 ## 📚 Citation
@@ -134,7 +131,7 @@ If you find this work useful, please cite our paper:
 
 ```bibtex
 @misc{zhou2025autoresearcher,
-      title        = {{\textsc{TrustResearcher}}: Automating Knowledge-Grounded and Transparent Research Ideation with Multi-Agent Collaboration},
+      title        = {{TrustResearcher}: Automating Knowledge-Grounded and Transparent Research Ideation with Multi-Agent Collaboration},
       author       = {Jiawei Zhou and Ruicheng Zhu and Mengshi Chen and Jianwei Wang and Kai Wang},
       year         = {2025},
       eprint       = {2510.20844},

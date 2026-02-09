@@ -172,8 +172,8 @@ class PregenValidator:
                     {"role": "system", "content": "You are a helpful assistant."},
                     {"role": "user", "content": "Say 'validation test successful' if you can respond."}
                 ],
-                "max_tokens": 10,
-                "temperature": 0
+                "max_tokens": 1024  # Increased for reasoning models that use reasoning tokens
+                # Note: temperature removed - Gemini models don't work well with low temperature values
             }
             
             headers = {
@@ -185,7 +185,7 @@ class PregenValidator:
                 f"{base_url}/chat/completions",
                 headers=headers,
                 json=test_payload,
-                timeout=15
+                timeout=60  # Increased timeout for models with reasoning (e.g., Gemini)
             )
             
             response_time = (time.time() - start_time) * 1000
