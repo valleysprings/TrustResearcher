@@ -1,1 +1,0 @@
-# Idea Generation Pipeline Prompts
