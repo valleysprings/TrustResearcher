@@ -205,9 +205,102 @@ class DebugLogger:
             "state": state,
             "timestamp": datetime.now().isoformat()
         }
-        
+
         self.log_debug(f"Component state: {json.dumps(state, default=str)}", component)
-    
+
+    def save_ideas(self, ideas: list, seed_topic: str, num_ideas: int, overgenerate_factor: int):
+        """Save all generated ideas to logs/idea/ directory.
+
+        Args:
+            ideas: List of ResearchIdea objects
+            seed_topic: The research topic
+            num_ideas: Target number of ideas requested
+            overgenerate_factor: Overgeneration multiplier used
+        """
+        if not ideas:
+            self.log_warning("No ideas to save", "ideagen")
+            return
+
+        try:
+            # Use session timestamp for filename
+            log_file = self.idea_log_dir / f"{self.session_id}.json"
+
+            # Prepare ideas data with all refinement rounds
+            ideas_data = []
+            for idea in ideas:
+                idea_dict = {
+                    "topic": idea.topic,
+                    "source": getattr(idea, 'source', 'unknown'),
+                    "method": getattr(idea, 'method', 'unknown'),
+                    "refinement_rounds": []
+                }
+
+                # Add initial facets
+                idea_dict["refinement_rounds"].append({
+                    "round": 1,
+                    "label": "initial",
+                    "reason": "Initial plan output",
+                    "facets": {
+                        "topic": idea.topic,
+                        "Problem Statement": idea.problem_statement,
+                        "Proposed Methodology": idea.proposed_methodology,
+                        "Experimental Validation": idea.experimental_validation
+                    }
+                })
+
+                # Add refinement rounds if available
+                if hasattr(idea, 'review_feedback') and idea.review_feedback:
+                    for idx, feedback in enumerate(idea.review_feedback, start=2):
+                        if isinstance(feedback, dict):
+                            round_data = {
+                                "round": idx,
+                                "label": feedback.get('type', 'refinement'),
+                                "reason": feedback.get('reason', 'Applied refinement'),
+                                "facets": {
+                                    "topic": idea.topic,
+                                    "Problem Statement": idea.problem_statement,
+                                    "Proposed Methodology": idea.proposed_methodology,
+                                    "Experimental Validation": idea.experimental_validation
+                                }
+                            }
+
+                            # Add critique data if available
+                            if feedback.get('type') == 'self_critique':
+                                round_data["critique"] = {
+                                    "overall_score": feedback.get('overall_score', 0),
+                                    "novelty_score": feedback.get('novelty_score', 0),
+                                    "feasibility_score": feedback.get('feasibility_score', 0),
+                                    "clarity_score": feedback.get('clarity_score', 0),
+                                    "impact_score": feedback.get('impact_score', 0),
+                                    "needs_refinement": feedback.get('needs_refinement', False),
+                                    "strengths": feedback.get('strengths', []),
+                                    "weaknesses": feedback.get('weaknesses', []),
+                                    "suggestions": feedback.get('suggestions', [])
+                                }
+
+                            idea_dict["refinement_rounds"].append(round_data)
+
+                ideas_data.append(idea_dict)
+
+            # Prepare complete log data
+            log_data = {
+                "timestamp": datetime.now().isoformat(),
+                "seed_topic": seed_topic,
+                "target_generation_count": num_ideas,
+                "actual_generation_count": len(ideas),
+                "overgenerate_factor": overgenerate_factor,
+                "ideas": ideas_data
+            }
+
+            # Save to file
+            with open(log_file, 'w', encoding='utf-8') as f:
+                json.dump(log_data, f, indent=2, ensure_ascii=False)
+
+            self.log_info(f"Saved {len(ideas)} ideas to {log_file}", "ideagen")
+
+        except Exception as e:
+            self.log_error(f"Failed to save ideas log: {e}", "ideagen", e)
+
     def get_session_summary(self) -> Dict[str, Any]:
         """Get summary of current session"""
         return {

@@ -1,0 +1,15 @@
+# Planning Module Configuration
+planning_module:
+  literature:
+    max_referenced_papers: 5       # Max papers to reference in plan
+    max_displayed_authors: 2       # Max authors to display per paper
+    max_keywords_display: 5        # Max keywords to show per paper
+    max_limitations_display: 3     # Max limitations to extract
+    abstract_truncate_length: 300  # Abstract truncation length
+    max_gaps_identified: 5         # Max research gaps to identify
+    max_methodology_keywords: 5    # Max methodology terms to extract
+    max_papers_for_limitations: 3  # Max papers to check for limitations
+  knowledge_graph:
+    max_related_entities: 10       # Max related entities from KG
+    max_cross_connections: 3       # Max cross-cluster connections
+    max_relationships_per_entity: 2 # Max relationships per entity

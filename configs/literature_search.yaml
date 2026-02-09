@@ -1,0 +1,56 @@
+# Semantic Scholar integration
+semantic_scholar:
+  api_key: "YOUR_SEMANTIC_SCHOLAR_API_KEY_HERE"
+  base_url: "https://api.semanticscholar.org/graph/v1"  # API base URL
+  num_papers: 50
+  rate_limit_delay: 1.2  # Increased delay between requests to avoid 429 errors
+  time_window: 300.0  # 5 minutes window to match Semantic Scholar limits
+  max_calls: 60  # Reduced from 90 to be more conservative
+  max_papers_per_search: 50
+  # Network timeouts
+  timeout: 30  # seconds for HTTP requests
+  # Query generation strategy
+  use_llm_query_generation: true  # Use LLM to generate queries (recommended) vs combinatorial approach
+  default_num_queries: 10  # Default number of queries to generate
+  # Legacy combinatorial search configuration (fallback only)
+  max_concepts: 8  # Max concepts for combinatorial search
+  max_queries_per_layer: 5  # Max queries per layer for combinatorial search
+  combination_order: "rev"  # 'rev' (descending) or 'fwd' (ascending) combination sizing
+  # Paper scoring parameters
+  scoring:
+    relevance_weight: 0.7          # Weight for concept relevance score (0-1)
+    citation_weight: 0.3           # Weight for citation impact score (0-1)
+    citation_normalization: 10000   # Normalize citation count by this value
+  # Query generation limits
+  search_limits:
+    max_queries_per_iteration: 4   # Max queries per iteration in iterative search
+    papers_per_query: 10           # Papers to request per individual query
+    abstract_truncate_length: 200  # Abstract truncation length for concept extraction
+    paper_buffer_size: 5           # Buffer size for duplicate handling
+  # Parallel search rate limiting
+  parallel_search:
+    max_concurrent: 2              # Max concurrent search queries
+    wait_time: 8                   # Wait time between batches (seconds)
+  # Relevance scoring weights (for _calculate_concept_relevance)
+  relevance_scoring:
+    title_weight: 3.0              # Weight for title matches
+    abstract_weight: 1.5           # Weight for abstract matches
+    keywords_weight: 1.0           # Weight for keyword field matches
+    partial_match_weight: 0.5      # Weight multiplier for partial matches
+  # Text filtering
+  title_normalization:
+    exclude_articles: ["a", "an", "the"]  # Articles to exclude in title normalization
+  # Common words filter (for technical term extraction)
+  filter_words:
+    - "method"
+    - "approach"
+    - "system"
+    - "model"
+    - "algorithm"
+    - "study"
+    - "analysis"
+    - "research"
+    - "paper"
+    - "work"
+    - "using"
+    - "based"

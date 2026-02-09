@@ -3,9 +3,9 @@ import aiohttp
 import json
 from typing import Dict, List, Optional, Tuple
 from .debug_logger import init_debug_logger
-from .async_utils import limit_async_func_call, retry_with_timeout, rate_limited
+from .async_utils import limit_async_func_call
 from .token_cost_tracker import TokenCostTracker
-from ..prompts.interface_prompts import (
+from ..skills.ideagen.graphop import (
     ENTITY_EXTRACTION_SYSTEM_PROMPT, ENTITY_EXTRACTION_USER_PROMPT
 )
 
@@ -15,43 +15,65 @@ class LLMInterface:
         # Validate config is provided
         if not config:
             raise ValueError("Configuration is required and cannot be None")
-        
+
         # Validate required fields
-        if not config.get("api_key"):
-            raise ValueError("API key is required in LLM configuration")
-        if not config.get("model_name"):
-            raise ValueError("Model name is required in LLM configuration")
-        if not config.get("base_url"):
-            raise ValueError("Base URL is required in LLM configuration")
-        
+        required_fields = [
+            "api_key", "model_name", "base_url", "max_tokens", "temperature",
+            "max_concurrent_calls", "rate_limit_calls", "rate_limit_window"
+        ]
+        for field in required_fields:
+            if field not in config:
+                raise ValueError(f"{field} is required in LLM configuration")
+
+        # Validate timeouts configuration
+        if "timeouts" not in config:
+            raise ValueError("timeouts configuration is required")
+        if "session_timeout" not in config["timeouts"]:
+            raise ValueError("timeouts.session_timeout is required in LLM configuration")
+
         self.model_name = config["model_name"]
         self.api_key = config["api_key"]
         self.base_url = config["base_url"]
-        self.default_max_tokens = config.get("max_tokens", 16384)  # Default context window
-        self.default_temperature = config.get("temperature", 0.7)
-        
+        self.default_max_tokens = config["max_tokens"]
+        self.default_temperature = config["temperature"]
+
         # Use unified max_tokens instead of per-task context windows
-        self.max_tokens = config.get("max_tokens", 16384)
-        
+        self.max_tokens = config["max_tokens"]
+
         # Async session will be initialized when needed
         self._session = None
         self.logger = logger or init_debug_logger()
-        
-        # Rate limiting configuration
-        self.max_concurrent_calls = config.get("max_concurrent_calls", 5)
-        self.rate_limit_calls = config.get("rate_limit_calls", 10)
-        self.rate_limit_window = config.get("rate_limit_window", 60)  # seconds
-        
+
+        # Rate limiting configuration - all from config file
+        self.max_concurrent_calls = config["max_concurrent_calls"]
+        self.rate_limit_calls = config["rate_limit_calls"]
+        self.rate_limit_window = config["rate_limit_window"]
+
+        # Timeout configuration
+        self.session_timeout = config["timeouts"]["session_timeout"]
+
+        # Retry configuration - read from config
+        if "retry" not in config:
+            raise ValueError("retry configuration is required in LLM configuration")
+        self.max_retries = config["retry"]["max_retries"]
+        self.retry_delay = config["retry"]["delay"]
+        self.retry_timeout = config["retry"]["timeout"]
+
+        # Extract custom pricing if available in config
+        custom_pricing = None
+        if "token_cost" in config and "custom_pricing" in config["token_cost"]:
+            custom_pricing = config["token_cost"]["custom_pricing"]
+
         # Token cost tracking
-        self.cost_tracker = TokenCostTracker(self.model_name, self.logger)
-        
+        self.cost_tracker = TokenCostTracker(self.model_name, self.logger, custom_pricing=custom_pricing)
+
         # Don't log sensitive information
         self.logger.log_info(f"LLM Interface initialized - Model: {self.model_name}", "llm_interface")
 
     async def get_session(self):
         """Get or create async session"""
         if self._session is None or self._session.closed:
-            timeout = aiohttp.ClientTimeout(total=120)  # 2 minute timeout
+            timeout = aiohttp.ClientTimeout(total=self.session_timeout)
             headers = {
                 "Authorization": f"Bearer {self.api_key}",
                 "Content-Type": "application/json"
@@ -115,9 +137,54 @@ class LLMInterface:
         response, _ = await self.chat_completion(messages, max_tokens, temperature, caller="general")
         return response
 
+    def _extract_response_text(self, result: Dict) -> str:
+        """Extract content text from various OpenAI-compatible or Gemini-like responses"""
+        if not isinstance(result, dict):
+            return ""
+
+        if isinstance(result.get("data"), dict):
+            return self._extract_response_text(result["data"])
+
+        choices = result.get("choices")
+        if isinstance(choices, list) and choices:
+            choice = choices[0] or {}
+            if isinstance(choice, dict):
+                message = choice.get("message")
+                if isinstance(message, dict):
+                    content = message.get("content")
+                    if isinstance(content, str):
+                        return content
+                if isinstance(choice.get("text"), str):
+                    return choice["text"]
+
+        candidates = result.get("candidates")
+        if isinstance(candidates, list) and candidates:
+            candidate = candidates[0] or {}
+            if isinstance(candidate, dict):
+                content = candidate.get("content")
+                if isinstance(content, dict):
+                    parts = content.get("parts")
+                    if isinstance(parts, list):
+                        text_parts = []
+                        for part in parts:
+                            if isinstance(part, dict) and isinstance(part.get("text"), str):
+                                text_parts.append(part["text"])
+                            elif isinstance(part, str):
+                                text_parts.append(part)
+                        joined = "".join(text_parts).strip()
+                        if joined:
+                            return joined
+                for key in ("text", "output", "content"):
+                    if isinstance(candidate.get(key), str):
+                        return candidate[key]
+
+        for key in ("output_text", "text", "content"):
+            if isinstance(result.get(key), str):
+                return result[key]
+
+        return ""
+
     @limit_async_func_call(max_size=8)
-    @rate_limited(max_calls=20, time_window=60)
-    @retry_with_timeout(max_retries=3, timeout=300, delay=2)
     async def chat_completion(
         self,
         messages: List[Dict],
@@ -126,39 +193,140 @@ class LLMInterface:
         caller: str = "unknown"
     ) -> Tuple[str, Optional[Dict]]:
         """Generate response using OpenAI-compatible chat completions API and cost tracking"""
-        try:
-            max_tokens = max_tokens or self.default_max_tokens
-            temperature = temperature or self.default_temperature
-            self.logger.log_debug(f"Making async API call for {caller}", "llm_interface")
-            
-            session = await self.get_session()
-            
-            async with session.post(
-                f"{self.base_url}/chat/completions",
-                json={
-                    "model": self.model_name,
-                    "messages": messages,
-                    "max_tokens": max_tokens,
-                    "temperature": temperature
+        last_exception = None
+
+        # Retry loop using config values
+        for attempt in range(self.max_retries):
+            try:
+                # Wrap entire operation in timeout from config
+                async def _make_request():
+                    max_tokens_val = max_tokens or self.default_max_tokens
+                    temperature_val = temperature or self.default_temperature
+                    self.logger.log_debug(f"Making async API call for {caller} (attempt {attempt + 1}/{self.max_retries})", "llm_interface")
+
+                    session = await self.get_session()
+
+                    request_payload = {
+                        "model": self.model_name,
+                        "messages": messages,
+                        "max_tokens": max_tokens_val,
+                        "temperature": temperature_val,
+                        "stop": None  # Explicitly disable stop sequences to prevent premature stopping
+                    }
+
+                    # Log the request for debugging
+                    self.logger.log_debug(
+                        f"Request for {caller}: model={self.model_name}, max_tokens={max_tokens_val}, "
+                        f"messages={len(messages)} items, temp={temperature_val}",
+                        "llm_interface"
+                    )
+
+                    async with session.post(
+                        f"{self.base_url}/chat/completions",
+                        json=request_payload
+                    ) as response:
+                        response.raise_for_status()
+                        try:
+                            result = await response.json(content_type=None)
+                        except Exception as e:
+                            raw_text = await response.text()
+                            self.logger.log_error(
+                                f"Non-JSON response for {caller}: {raw_text[:500]}",
+                                "llm_interface",
+                                e
+                            )
+                            return "", None
+
+                        # Log usage details for debugging
+                        usage = result.get("usage", {})
+                        completion_details = usage.get("completion_tokens_details", {})
+                        self.logger.log_debug(
+                            f"Response for {caller}: "
+                            f"prompt_tokens={usage.get('prompt_tokens', 0)}, "
+                            f"completion_tokens={usage.get('completion_tokens', 0)}, "
+                            f"reasoning_tokens={completion_details.get('reasoning_tokens', 0)}, "
+                            f"content_tokens={completion_details.get('content_tokens', 0)}",
+                            "llm_interface"
+                        )
+
+                        response_text = self._extract_response_text(result)
+                        if not response_text:
+                            # Log more details about the empty response
+                            choices_info = "N/A"
+                            if "choices" in result and result["choices"]:
+                                first_choice = result["choices"][0]
+                                choices_info = f"choices[0] keys: {list(first_choice.keys()) if isinstance(first_choice, dict) else 'not a dict'}"
+                                if isinstance(first_choice, dict) and "message" in first_choice:
+                                    msg = first_choice["message"]
+                                    choices_info += f", message keys: {list(msg.keys()) if isinstance(msg, dict) else 'not a dict'}"
+                                    if isinstance(msg, dict):
+                                        choices_info += f", content='{msg.get('content', 'N/A')[:100]}'"
+
+                            self.logger.log_warning(
+                                f"Empty response content for {caller}; response keys: {list(result.keys())}, {choices_info}",
+                                "llm_interface"
+                            )
+
+                            # Log full response for debugging (only if DEBUG level)
+                            import json
+                            self.logger.log_debug(
+                                f"Full empty response for {caller}: {json.dumps(result, indent=2)}",
+                                "llm_interface"
+                            )
+
+                        # Track token usage and costs
+                        cost_info = self.cost_tracker.track_conversation(caller, messages, response_text)
+
+                        self.logger.log_debug(
+                            f"Async API call successful for {caller} - Response length: {len(response_text)}, "
+                            f"Tokens: {cost_info['tokens']['total_tokens']}, Cost: ${cost_info['costs_usd']['total_cost']:.6f}",
+                            "llm_interface"
+                        )
+                        return response_text, cost_info
+
+                # Apply timeout from config
+                result = await asyncio.wait_for(_make_request(), timeout=self.retry_timeout)
+                return result
+
+            except asyncio.TimeoutError:
+                last_exception = asyncio.TimeoutError(f"Request timed out after {self.retry_timeout}s")
+                if attempt < self.max_retries - 1:
+                    self.logger.log_warning(
+                        f"Async API call timed out for {caller} (attempt {attempt + 1}/{self.max_retries}) after {self.retry_timeout}s. Retrying in {self.retry_delay}s...",
+                        "llm_interface"
+                    )
+                    await asyncio.sleep(self.retry_delay)
+                else:
+                    self.logger.log_error(
+                        f"Async API call timed out for {caller} after {self.max_retries} attempts ({self.retry_timeout}s each)",
+                        "llm_interface",
+                        last_exception
+                    )
+
+            except Exception as e:
+                import traceback
+                last_exception = e
+                error_details = {
+                    "type": type(e).__name__,
+                    "message": str(e),
+                    "traceback": traceback.format_exc()
                 }
-            ) as response:
-                response.raise_for_status()
-                result = await response.json()
-                response_text = result.get("choices", [{}])[0].get("message", {}).get("content", "")
-                
-                # Track token usage and costs
-                cost_info = self.cost_tracker.track_conversation(caller, messages, response_text)
-                
-                self.logger.log_debug(
-                    f"Async API call successful for {caller} - Response length: {len(response_text)}, "
-                    f"Tokens: {cost_info['tokens']['total_tokens']}, Cost: ${cost_info['costs_usd']['total_cost']:.6f}", 
-                    "llm_interface"
-                )
-                return response_text, cost_info
-                
-        except Exception as e:
-            self.logger.log_error(f"Async API call failed for {caller}: {e}", "llm_interface", e)
-            return "", None
+
+                if attempt < self.max_retries - 1:
+                    self.logger.log_warning(
+                        f"Async API call failed for {caller} (attempt {attempt + 1}/{self.max_retries}): {error_details['type']} - {error_details['message']}. Retrying in {self.retry_delay}s...",
+                        "llm_interface"
+                    )
+                    await asyncio.sleep(self.retry_delay)
+                else:
+                    self.logger.log_error(
+                        f"Async API call failed for {caller} after {self.max_retries} attempts: {error_details['type']} - {error_details['message']}",
+                        "llm_interface",
+                        e
+                    )
+                    self.logger.log_debug(f"Full traceback for {caller}:\n{error_details['traceback']}", "llm_interface")
+
+        return "", None
 
     async def generate_with_system_prompt(self, system_prompt: str, user_prompt: str, 
                                          max_tokens: int = None, temperature: float = None, 

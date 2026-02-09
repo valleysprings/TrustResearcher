@@ -1,385 +1,434 @@
 """
 Reviewer Agent
 
-Provides comprehensive peer review and evaluation of research ideas across multiple criteria.
-Supports detailed reviews, comparative analysis, and multi-dimensional scoring.
+Two-stage comprehensive peer review:
+- Stage 1: Quick preliminary critique (IdeaCritique)
+- Stage 2: Systematic per-criterion detailed evaluation
+
+Replaces and consolidates: reviewer_agent.py, novelty_agent.py, aggregator.py
 """
 
-from typing import Dict, List, Optional, Any
-from .base_agent import BaseAgent
-from ..utils.llm_interface import LLMInterface
-from ..utils.text_utils import safe_json_parse, extract_scores_from_response, extract_sections_from_response, extract_score_from_response, extract_bullet_points_from_response
-from .idea_generator import ResearchIdea
-from ..prompts.detailed_review.reviewer_agent_prompts import (
-    DETAILED_REVIEW_SYSTEM_PROMPT, DETAILED_REVIEW_USER_PROMPT, DETAILED_REVIEW_EXTENDED_PROMPT,
-    COMPARATIVE_REVIEW_SYSTEM_PROMPT, COMPARATIVE_REVIEW_USER_PROMPT,
-    ORIGINALITY_SYSTEM_PROMPT, ORIGINALITY_USER_PROMPT,
-    CLARITY_SYSTEM_PROMPT, CLARITY_USER_PROMPT,
-    FEASIBILITY_SYSTEM_PROMPT, FEASIBILITY_USER_PROMPT
-)
-import json
 import re
+from typing import Dict, List, Optional
+from .idea_gen.research_idea import ResearchIdea
+from ..utils.llm_interface import LLMInterface
+from ..utils.async_utils import limit_async_func_call, retry_with_timeout
+from ..utils.text_utils import safe_json_parse
+from ..skills.reviewer import (
+    STAGE1_CRITIQUE_SYSTEM_PROMPT, STAGE1_CRITIQUE_USER_PROMPT
+)
+from ..skills.reviewer import (
+    STAGE2_NOVELTY_SYSTEM_PROMPT, STAGE2_NOVELTY_USER_PROMPT,
+    STAGE2_FEASIBILITY_SYSTEM_PROMPT, STAGE2_FEASIBILITY_USER_PROMPT,
+    STAGE2_CLARITY_SYSTEM_PROMPT, STAGE2_CLARITY_USER_PROMPT,
+    STAGE2_IMPACT_SYSTEM_PROMPT, STAGE2_IMPACT_USER_PROMPT
+)
 
 
-class ReviewerAgent(BaseAgent):
-    """
-    Enhanced reviewer agent that provides detailed peer-review style feedback
-    on research ideas, evaluating multiple criteria and providing actionable suggestions.
-    """
-    
-    def __init__(self, config: Dict = None, logger=None, llm_config: Dict = None):
-        super().__init__("ReviewerAgent")
-        self.config = config or {}
+class IdeaCritique:
+    """Stage 1: Quick preliminary critique on research ideas."""
+
+    def __init__(self, llm_interface, config: Dict = None, logger=None):
+        self.llm = llm_interface
+        self.reviewer_config = config or {}
+        self.logger = logger
+
+    @limit_async_func_call(config_path='idea_generation.async_func_max_size')
+    @retry_with_timeout()
+    async def critique_idea(self, idea) -> Dict:
+        """Perform preliminary critique on a generated idea."""
+        user_prompt = STAGE1_CRITIQUE_USER_PROMPT.format(idea=idea)
+        response = await self.llm.generate_with_system_prompt(
+            STAGE1_CRITIQUE_SYSTEM_PROMPT,
+            user_prompt,
+            caller="idea_critique",
+            task_type="idea_generation"
+        )
+        return self._parse_critique_response(response)
+
+    def _parse_critique_response(self, response: str) -> Dict:
+        """Parse critique response into structured data."""
+        stage1_config = self.reviewer_config['stage1_critique']
+        default_facet = stage1_config['default_facet_score']
+        default_overall = stage1_config['default_overall_score']
+
+        critique = {
+            "overall_score": default_overall,
+            "novelty_score": default_facet,
+            "feasibility_score": default_facet,
+            "clarity_score": default_facet,
+            "impact_score": default_facet,
+            "needs_refinement": True,
+            "strengths": [],
+            "weaknesses": [],
+            "suggestions": []
+        }
+
+        json_result = safe_json_parse(response)
+        if json_result and isinstance(json_result, dict):
+            for k in ["novelty_score", "feasibility_score", "clarity_score", "impact_score"]:
+                if k in json_result:
+                    try:
+                        critique[k] = float(json_result[k])
+                    except Exception:
+                        pass
+
+            if "criteria_scores" in json_result and isinstance(json_result["criteria_scores"], dict):
+                cs = json_result["criteria_scores"]
+                for k in ["novelty", "feasibility", "clarity", "impact"]:
+                    v = cs.get(k)
+                    if isinstance(v, (int, float)):
+                        critique[f"{k}_score"] = float(v)
+
+            if "needs_refinement" in json_result:
+                val = json_result.get("needs_refinement")
+                if isinstance(val, str):
+                    critique["needs_refinement"] = val.strip().lower() in {"yes", "true", "y"}
+                elif isinstance(val, bool):
+                    critique["needs_refinement"] = val
+
+            critique["strengths"] = json_result.get("strengths", [])
+            critique["weaknesses"] = json_result.get("weaknesses", [])
+            critique["suggestions"] = json_result.get("suggestions", [])
+            return self._finalize_scores(critique, default_overall)
+
+        return self._parse_critique_text(response, critique, default_overall)
+
+    def _parse_critique_text(self, response: str, critique: Dict, default_overall: float) -> Dict:
+        """Fallback text parsing for critique response."""
+        lines = response.split('\n')
+        current_section = None
+
+        for line in lines:
+            line = line.strip()
+            for key in ["novelty", "feasibility", "clarity", "impact"]:
+                if key in line.lower():
+                    m = re.search(r'(\d+(?:\.\d+)?)', line)
+                    if m:
+                        critique[f"{key}_score"] = float(m.group(1))
+
+            if 'needs_refinement' in line.lower():
+                critique['needs_refinement'] = 'yes' in line.lower() or 'true' in line.lower()
+            elif 'strength' in line.lower():
+                current_section = "strengths"
+            elif 'weakness' in line.lower():
+                current_section = "weaknesses"
+            elif 'suggestion' in line.lower():
+                current_section = "suggestions"
+            elif line.startswith('-') or line.startswith('•'):
+                if current_section and current_section in critique:
+                    critique[current_section].append(line[1:].strip())
+
+        return self._finalize_scores(critique, default_overall)
+
+    def _finalize_scores(self, critique: Dict, default_overall: float) -> Dict:
+        """Calculate overall score from individual scores."""
+        facet_keys = ["novelty_score", "feasibility_score", "clarity_score", "impact_score"]
+        facet_values = []
+
+        for key in facet_keys:
+            value = critique.get(key)
+            if isinstance(value, (int, float)):
+                facet_values.append(float(value))
+
+        if facet_values:
+            critique['overall_score'] = round(sum(facet_values) / len(facet_values), 2)
+        else:
+            critique['overall_score'] = float(default_overall)
+
+        return critique
+
+
+class ReviewerAgent:
+    """Two-stage reviewer: preliminary critique + systematic per-criterion evaluation."""
+
+    def __init__(self, reviewer_config: Dict = None, logger=None, llm_config: Dict = None):
+        self.reviewer_config = reviewer_config or {}
         self.logger = logger
         self.llm = LLMInterface(config=llm_config, logger=logger)
-        self.feedback_history = []
-        
-        # Review criteria with weights - configurable via config
-        default_review_criteria = {
-            'novelty': {'weight': 0.25, 'description': 'Originality and innovation of the approach'},
-            'feasibility': {'weight': 0.20, 'description': 'Technical and practical implementability'},
-            'clarity': {'weight': 0.20, 'description': 'Clear problem definition and methodology'},
-            'impact': {'weight': 0.25, 'description': 'Potential significance and contribution'},
-            'methodology_soundness': {'weight': 0.10, 'description': 'Scientific rigor of proposed methods'}
-        }
-        
-        # Load review criteria from config, with defaults as fallback
-        self.review_criteria = self.config.get('review_criteria', default_review_criteria)
-        
-        # Validate that weights sum to approximately 1.0
-        total_weight = sum(criterion.get('weight', 0) for criterion in self.review_criteria.values())
-        weight_tolerance = self.config.get('weight_tolerance', 0.01)  # Allow small floating point errors
-        if abs(total_weight - 1.0) > weight_tolerance:
-            if self.logger:
-                self.logger.log_warning(f"Review criteria weights sum to {total_weight:.3f}, not 1.0. Consider adjusting weights.", "reviewer_agent")
-        
-        if self.logger:
-            criteria_names = list(self.review_criteria.keys())
-            self.logger.log_info(f"Initialized ReviewerAgent with criteria: {criteria_names}", "reviewer_agent")
+        self.critique_tool = IdeaCritique(self.llm, config=self.reviewer_config, logger=logger)
 
-    async def review(self, idea: ResearchIdea, criteria: List[str] = None, 
-              detailed: bool = True) -> Dict:
-        """
-        Main review method that provides comprehensive feedback on a research idea
-        """
-        if criteria is None:
-            criteria = list(self.review_criteria.keys())
-        
-        print(f"Reviewing research idea: {idea.topic}")
-        
-        # Perform detailed review
-        review_result = await self.perform_detailed_review(idea, criteria, detailed)
-        
-        # Store feedback history
-        self.feedback_history.append({
-            'idea_topic': idea.topic,
-            'review_result': review_result,
-            'criteria_used': criteria
-        })
-        
-        # Add feedback to the idea
-        idea.add_feedback(review_result)
-        
-        return review_result
-
-    async def perform_detailed_review(self, idea: ResearchIdea, criteria: List[str], 
-                               detailed: bool) -> Dict:
-        """Perform a comprehensive review of the research idea"""
-        
-        criteria_descriptions = []
-        for criterion in criteria:
-            if criterion in self.review_criteria:
-                desc = self.review_criteria[criterion]['description']
-                criteria_descriptions.append(f"- {criterion.title()}: {desc}")
-        
-        user_prompt = DETAILED_REVIEW_USER_PROMPT.format(
-            criteria_descriptions=chr(10).join(criteria_descriptions),
-            idea=idea
-        )
-        
-        if detailed:
-            user_prompt += DETAILED_REVIEW_EXTENDED_PROMPT
-
-        max_tokens = self.config.get('llm', {}).get('max_tokens', 16384)
-        response = await self.llm.generate_with_system_prompt(DETAILED_REVIEW_SYSTEM_PROMPT, user_prompt, max_tokens=max_tokens, caller="reviewer_agent")
-        
-        return self.parse_review_response(response, criteria)
-
-    def parse_review_response(self, response: str, criteria: List[str]) -> Dict:
-        """Parse the LLM review response into structured feedback"""
-
-        review_result = {
-            'overall_score': 0.0,
-            'criteria_scores': {},
-            'strengths': "",
-            'weaknesses': "",
-            'suggestions': "",
-            'recommendation': 'revise',
-            'priority_revisions': ""
-        }
-
-        # Parse scores from JSON or extract from text
-        review_result['criteria_scores'] = extract_scores_from_response(response, criteria, default_score=3.0)
-
-        # Calculate overall score from criteria scores using weighted average
-        total_weighted_score = 0
-        total_weight = 0
-
-        for criterion, score in review_result['criteria_scores'].items():
-            if criterion in self.review_criteria:
-                weight = self.review_criteria[criterion]['weight']
-                total_weighted_score += score * weight
-                total_weight += weight
-
-        if total_weight > 0:
-            review_result['overall_score'] = total_weighted_score / total_weight
-        else:
-            # Fallback: try to extract overall_score from JSON if calculation failed
-            json_data = safe_json_parse(response)
-            if json_data and isinstance(json_data, dict) and 'overall_score' in json_data:
-                review_result['overall_score'] = float(json_data['overall_score'])
-
-        # Extract sections as raw text from JSON or text parsing
-        json_data = safe_json_parse(response)
-        if json_data and isinstance(json_data, dict):
-            # Get raw text from JSON structure
-            for key in ['strengths', 'weaknesses', 'suggestions', 'priority_revisions']:
-                if key in json_data:
-                    if isinstance(json_data[key], list):
-                        # Join list items with newlines and bullet points
-                        review_result[key] = '\n'.join(f"- {item}" for item in json_data[key])
-                    elif isinstance(json_data[key], str):
-                        review_result[key] = json_data[key]
-                else:
-                    review_result[key] = ""
-        else:
-            # Fallback to text parsing for raw sections
-            section_patterns = {
-                'strengths': ['strengths', 'strength'],
-                'weaknesses': ['weakness', 'concerns', 'weaknesses'],
-                'suggestions': ['suggestions', 'suggestion'],
-                'priority_revisions': ['priority revision', 'priority revisions']
+        # Review criteria with weights (from config)
+        stage2_config = self.reviewer_config['stage2_detailed']
+        self.review_criteria = {}
+        for criterion, criterion_config in stage2_config['criteria'].items():
+            self.review_criteria[criterion] = {
+                'weight': criterion_config['weight'],
+                'enabled': criterion_config['enabled']
             }
 
-            for key in ['strengths', 'weaknesses', 'suggestions', 'priority_revisions']:
-                review_result[key] = ""
-                pattern_names = section_patterns.get(key, [key])
-                for pattern_name in pattern_names:
-                    pattern = rf"{pattern_name}[:\-](.*?)(?={'|'.join(sum(section_patterns.values(), []))}|$)"
-                    match = re.search(pattern, response, re.IGNORECASE | re.DOTALL)
-                    if match:
-                        content = match.group(1).strip()
-                        if content:
-                            review_result[key] = content
-                            break
+        self.feedback_history = []
 
-        # Determine recommendation based on overall score using config thresholds
-        thresholds = self.config.get('thresholds', {})
-        accept_threshold = thresholds.get('accept', 4.0)
-        minor_revise_threshold = thresholds.get('minor_revise', 3.5)
-        major_revise_threshold = thresholds.get('major_revise', 2.5)
+    async def review(self, idea: ResearchIdea, enable_stage1: bool = True, enable_stage2: bool = True) -> Dict:
+        """
+        Two-stage review: preliminary critique + detailed per-criterion evaluation.
 
-        if review_result['overall_score'] >= accept_threshold:
-            review_result['recommendation'] = 'accept'
-        elif review_result['overall_score'] >= minor_revise_threshold:
-            review_result['recommendation'] = 'minor_revise'
-        elif review_result['overall_score'] >= major_revise_threshold:
-            review_result['recommendation'] = 'major_revise'
-        else:
-            review_result['recommendation'] = 'reject'
+        Args:
+            idea: Research idea to review
+            enable_stage1: Enable preliminary critique (fast)
+            enable_stage2: Enable detailed per-criterion review (thorough)
+
+        Returns:
+            Comprehensive review with both stages
+        """
+        print(f"Reviewing: {idea.topic}")
+
+        review_result = {
+            'idea_topic': idea.topic,
+            'stage1_preliminary': None,
+            'stage2_detailed': None,
+            'overall_assessment': {}
+        }
+
+        # Stage 1: Preliminary Critique (Fast)
+        if enable_stage1:
+            print("  Stage 1: Preliminary critique...")
+            review_result['stage1_preliminary'] = await self.critique_tool.critique_idea(idea)
+
+        # Stage 2: Systematic Per-Criterion Review (Detailed)
+        if enable_stage2:
+            print("  Stage 2: Detailed per-criterion review...")
+            review_result['stage2_detailed'] = await self._systematic_review(
+                idea,
+                review_result['stage1_preliminary']
+            )
+
+        # Aggregate assessment
+        review_result['overall_assessment'] = self._aggregate_assessment(
+            review_result['stage1_preliminary'],
+            review_result['stage2_detailed']
+        )
+
+        # Store and attach feedback - include both stages
+        self.feedback_history.append(review_result)
+        feedback_data = {
+            'type': 'two_stage_review',
+            'stage1_preliminary': review_result['stage1_preliminary'],
+            'stage2_detailed': review_result['stage2_detailed'],
+            **review_result['overall_assessment']
+        }
+        idea.add_feedback(feedback_data)
 
         return review_result
 
+    async def _systematic_review(self, idea: ResearchIdea, stage1_result: Optional[Dict]) -> Dict:
+        """Systematic per-criterion detailed evaluation."""
+        detailed_review = {'criterion_reviews': {}, 'overall_detailed_score': None}
 
-    async def comparative_review(self, ideas: List[ResearchIdea], 
-                          ranking_criteria: List[str] = None) -> Dict:
-        """Compare and rank multiple research ideas"""
-        
-        if ranking_criteria is None:
-            ranking_criteria = ['novelty', 'impact', 'feasibility']
-        
-        # Review each idea individually first
-        reviews = []
-        for idea in ideas:
-            review = self.review(idea, criteria=ranking_criteria, detailed=False)
-            reviews.append({
-                'idea': idea,
-                'review': review,
-                'overall_score': review['overall_score']
-            })
-        
-        # Sort by overall score
-        reviews.sort(key=lambda x: x['overall_score'], reverse=True)
-        
-        # Generate comparative analysis
-        ideas_summary = []
-        for i, review_data in enumerate(reviews):
-            idea = review_data['idea']
-            score = review_data['overall_score']
-            summary_length = self.config.get('max_summary_length', 100)
-            problem_statement = idea.facets.get('Problem Statement', '')
-            summary = problem_statement[:summary_length] + '...' if len(problem_statement) > summary_length else problem_statement
-            ideas_summary.append(f"Idea {i+1} (Score: {score:.2f}): {idea.topic}\n{summary}")
-        
-        user_prompt = COMPARATIVE_REVIEW_USER_PROMPT.format(
-            ideas_summary=chr(10).join(ideas_summary)
+        # Evaluate each enabled criterion
+        for criterion, config in self.review_criteria.items():
+            if config.get('enabled', True):
+                print(f"    Evaluating {criterion}...")
+                detailed_review['criterion_reviews'][criterion] = await self._evaluate_criterion(
+                    idea, criterion, stage1_result
+                )
+
+        # Calculate weighted overall score (only if all scores are present)
+        total_weight = sum(c['weight'] for c in self.review_criteria.values() if c.get('enabled', True))
+
+        # Collect valid scores
+        valid_scores = []
+        for c in detailed_review['criterion_reviews']:
+            score = detailed_review['criterion_reviews'][c].get('score')
+            if score is not None:
+                valid_scores.append((score, self.review_criteria[c]['weight']))
+
+        # Calculate weighted average only if we have all scores
+        if len(valid_scores) == len(detailed_review['criterion_reviews']) and total_weight > 0:
+            weighted_sum = sum(score * weight for score, weight in valid_scores)
+            detailed_review['overall_detailed_score'] = round(weighted_sum / total_weight, 2)
+        else:
+            detailed_review['overall_detailed_score'] = None
+
+        return detailed_review
+
+    async def _evaluate_criterion(self, idea: ResearchIdea, criterion: str, stage1_result: Optional[Dict]) -> Dict:
+        """Evaluate a single criterion in depth."""
+        # Build context from Stage 1
+        stage1_context = ""
+        if stage1_result:
+            stage1_score = stage1_result.get(f'{criterion}_score', 'N/A')
+            stage1_context = f"\nPreliminary {criterion} score: {stage1_score}"
+
+        # Route to specialized evaluation
+        if criterion == 'novelty':
+            return await self._evaluate_novelty(idea, stage1_context)
+        elif criterion == 'feasibility':
+            return await self._evaluate_feasibility(idea, stage1_context)
+        elif criterion == 'clarity':
+            return await self._evaluate_clarity(idea, stage1_context)
+        elif criterion == 'impact':
+            return await self._evaluate_impact(idea, stage1_context)
+        else:
+            return {'criterion': criterion, 'score': None, 'strengths': [], 'weaknesses': [], 'suggestions': []}
+
+    async def _evaluate_novelty(self, idea: ResearchIdea, stage1_context: str) -> Dict:
+        """Evaluate novelty with multi-dimensional assessment (integrates former NoveltyAgent)."""
+        user_prompt = STAGE2_NOVELTY_USER_PROMPT.format(idea=idea, stage1_context=stage1_context)
+        response = await self.llm.generate_with_system_prompt(
+            STAGE2_NOVELTY_SYSTEM_PROMPT, user_prompt,
+            caller="reviewer_novelty"
         )
+        return self._parse_criterion_response(response, 'novelty')
 
-        max_tokens = self.config.get('llm', {}).get('max_tokens', 16384)
-        comparative_analysis = await self.llm.generate_with_system_prompt(COMPARATIVE_REVIEW_SYSTEM_PROMPT, user_prompt, max_tokens=max_tokens, caller="reviewer_agent")
-        
-        return {
-            'ranked_ideas': reviews,
-            'comparative_analysis': comparative_analysis,
-            'ranking_criteria': ranking_criteria
-        }
-
-    async def check_originality(self, idea: ResearchIdea, context_knowledge: str = "") -> Dict:
-        """Check the originality of an idea against existing knowledge"""
-        
-        user_prompt = ORIGINALITY_USER_PROMPT.format(
-            idea=idea,
-            context_knowledge=context_knowledge
+    async def _evaluate_feasibility(self, idea: ResearchIdea, stage1_context: str) -> Dict:
+        """Evaluate technical and practical feasibility."""
+        user_prompt = STAGE2_FEASIBILITY_USER_PROMPT.format(idea=idea, stage1_context=stage1_context)
+        response = await self.llm.generate_with_system_prompt(
+            STAGE2_FEASIBILITY_SYSTEM_PROMPT, user_prompt,
+            caller="reviewer_feasibility"
         )
+        return self._parse_criterion_response(response, 'feasibility')
 
-        max_tokens = self.config.get('llm', {}).get('max_tokens', 16384)
-        response = await self.llm.generate_with_system_prompt(ORIGINALITY_SYSTEM_PROMPT, user_prompt, max_tokens=max_tokens, caller="reviewer_agent")
-        
-        # Parse originality assessment
-        originality_result = {
-            'originality_score': 3,
-            'similar_work': [],
-            'novel_aspects': [],
-            'differentiation_suggestions': [],
-            'related_work_to_investigate': [],
-            'assessment': response
-        }
-        
-        # Extract score
-        import re
-        score_match = re.search(r'originality.*?score.*?(\d)', response, re.IGNORECASE)
-        if score_match:
-            originality_result['originality_score'] = int(score_match.group(1))
-        
-        return originality_result
+    async def _evaluate_clarity(self, idea: ResearchIdea, stage1_context: str) -> Dict:
+        """Evaluate clarity of problem definition and methodology."""
+        user_prompt = STAGE2_CLARITY_USER_PROMPT.format(idea=idea, stage1_context=stage1_context)
+        response = await self.llm.generate_with_system_prompt(
+            STAGE2_CLARITY_SYSTEM_PROMPT, user_prompt,
+            caller="reviewer_clarity"
+        )
+        return self._parse_criterion_response(response, 'clarity')
 
-    async def check_clarity(self, idea: ResearchIdea) -> Dict:
-        """Assess the clarity of problem definition, methodology, and validation"""
-        
-        user_prompt = CLARITY_USER_PROMPT.format(idea=idea)
+    async def _evaluate_impact(self, idea: ResearchIdea, stage1_context: str) -> Dict:
+        """Evaluate potential impact and significance."""
+        user_prompt = STAGE2_IMPACT_USER_PROMPT.format(idea=idea, stage1_context=stage1_context)
+        response = await self.llm.generate_with_system_prompt(
+            STAGE2_IMPACT_SYSTEM_PROMPT,
+            user_prompt,
+            caller="reviewer_impact"
+        )
+        return self._parse_criterion_response(response, 'impact')
 
-        max_tokens = self.config.get('llm', {}).get('max_tokens', 16384)
-        response = await self.llm.generate_with_system_prompt(CLARITY_SYSTEM_PROMPT, user_prompt, max_tokens=max_tokens, caller="reviewer_agent")
-        
-        return {
-            'clarity_assessment': response,
-            'overall_clarity_score': extract_score_from_response(response),
-            'improvement_suggestions': extract_bullet_points_from_response(response, self.config.get('max_bullet_points', 5))
-        }
+    def _map_criterion_fields(self, json_data: Dict, criterion: str) -> tuple:
+        """Map criterion-specific JSON fields to strengths/weaknesses/suggestions."""
+        strengths = []
+        weaknesses = []
+        suggestions = []
 
-    async def check_feasibility(self, idea: ResearchIdea) -> Dict:
-        """Assess the technical and practical feasibility of the research idea"""
-        
-        user_prompt = FEASIBILITY_USER_PROMPT.format(idea=idea)
+        if criterion == 'novelty':
+            # Strengths: novel aspects, differentiation
+            strengths.extend(json_data.get('novel_aspects', []))
+            if json_data.get('differentiation'):
+                strengths.append(f"Differentiation: {json_data['differentiation']}")
+            if json_data.get('incremental_vs_breakthrough'):
+                strengths.append(f"Innovation type: {json_data['incremental_vs_breakthrough']}")
 
-        max_tokens = self.config.get('llm', {}).get('max_tokens', 16384)
-        response = await self.llm.generate_with_system_prompt(FEASIBILITY_SYSTEM_PROMPT, user_prompt, max_tokens=max_tokens, caller="reviewer_agent")
-        
-        return {
-            'feasibility_assessment': response,
-            'overall_feasibility_score': extract_score_from_response(response),
-            'risks_identified': extract_bullet_points_from_response(response, self.config.get('max_bullet_points', 5)),
-            'resource_requirements': self.parse_requirements(response)
-        }
+            # Weaknesses: overlaps with existing work
+            weaknesses.extend(json_data.get('existing_work_overlap', []))
 
+            # Suggestions: recommendations
+            suggestions.extend(json_data.get('recommendations', []))
 
-    def parse_requirements(self, text: str) -> Dict:
-        """Parse resource requirements from text"""
-        requirements = {
-            'computational': 'Not specified',
-            'data': 'Not specified', 
-            'expertise': 'Not specified',
-            'timeline': 'Not specified'
-        }
-        
-        # Simple parsing - could be enhanced
-        if 'data' in text.lower():
-            requirements['data'] = 'Dataset required'
-        if 'compute' in text.lower() or 'gpu' in text.lower():
-            requirements['computational'] = 'High compute resources'
-        if 'expert' in text.lower():
-            requirements['expertise'] = 'Domain expertise needed'
-            
-        return requirements
+        elif criterion == 'feasibility':
+            # Strengths: technical strengths
+            strengths.extend(json_data.get('technical_strengths', []))
+            if json_data.get('timeline_assessment'):
+                strengths.append(f"Timeline: {json_data['timeline_assessment']}")
 
-    def get_review_summary(self, ideas: List[ResearchIdea]) -> Dict:
-        """Generate a summary of all reviews conducted"""
-        
-        if not self.feedback_history:
-            return {'message': 'No reviews conducted yet'}
-        
-        # Aggregate statistics
-        total_reviews = len(self.feedback_history)
-        avg_scores = {}
-        recommendations = {'accept': 0, 'minor_revise': 0, 'major_revise': 0, 'reject': 0}
-        
-        for feedback in self.feedback_history:
-            review = feedback['review_result']
-            
-            # Aggregate criterion scores
-            for criterion, score in review.get('criteria_scores', {}).items():
-                if criterion not in avg_scores:
-                    avg_scores[criterion] = []
-                avg_scores[criterion].append(score)
-            
-            # Count recommendations
-            rec = review.get('recommendation', 'revise')
-            if rec in recommendations:
-                recommendations[rec] += 1
-        
-        # Calculate averages
-        for criterion in avg_scores:
-            avg_scores[criterion] = sum(avg_scores[criterion]) / len(avg_scores[criterion])
-        
-        return {
-            'total_reviews': total_reviews,
-            'average_scores': avg_scores,
-            'recommendations_distribution': recommendations,
-            'most_common_issues': self.identify_common_issues(),
-            'review_history': self.feedback_history
+            # Weaknesses: challenges, risks, resource requirements
+            weaknesses.extend(json_data.get('technical_challenges', []))
+            weaknesses.extend(json_data.get('risk_factors', []))
+            if json_data.get('resource_requirements'):
+                for req in json_data['resource_requirements']:
+                    weaknesses.append(f"Resource need: {req}")
+
+            # Suggestions: mitigation strategies
+            suggestions.extend(json_data.get('mitigation_strategies', []))
+
+        elif criterion == 'clarity':
+            # Strengths: well-articulated aspects
+            strengths.extend(json_data.get('well_articulated_aspects', []))
+            if json_data.get('logical_flow'):
+                strengths.append(f"Logical flow: {json_data['logical_flow']}")
+            if json_data.get('completeness'):
+                strengths.append(f"Completeness: {json_data['completeness']}")
+
+            # Weaknesses: ambiguous aspects
+            weaknesses.extend(json_data.get('ambiguous_aspects', []))
+
+            # Suggestions: clarification needs
+            suggestions.extend(json_data.get('clarification_needs', []))
+
+        elif criterion == 'impact':
+            # Strengths: contributions, applications, advancement
+            strengths.extend(json_data.get('scientific_contributions', []))
+            strengths.extend(json_data.get('practical_applications', []))
+            if json_data.get('field_advancement'):
+                strengths.append(f"Field advancement: {json_data['field_advancement']}")
+            if json_data.get('broader_implications'):
+                strengths.append(f"Broader implications: {json_data['broader_implications']}")
+
+            # Weaknesses: limitations
+            weaknesses.extend(json_data.get('limitations', []))
+
+            # Suggestions: enhancement suggestions
+            suggestions.extend(json_data.get('enhancement_suggestions', []))
+
+        return strengths, weaknesses, suggestions
+
+    def _parse_criterion_response(self, response: str, criterion: str) -> Dict:
+        """Parse criterion evaluation response into structured format with flexible field mapping."""
+        result = {
+            'criterion': criterion,
+            'score': None,
+            'strengths': [],
+            'weaknesses': [],
+            'suggestions': [],
+            'raw_data': {}
         }
 
-    def identify_common_issues(self) -> List[str]:
-        """Identify common issues across reviews"""
-        all_weaknesses = []
-        for feedback in self.feedback_history:
-            weaknesses = feedback['review_result'].get('weaknesses', [])
-            all_weaknesses.extend(weaknesses)
-        
-        # Simple frequency analysis (could be more sophisticated)
-        issue_keywords = ['clarity', 'novelty', 'feasibility', 'validation', 'methodology']
-        common_issues = []
-        
-        for keyword in issue_keywords:
-            count = sum(1 for weakness in all_weaknesses if keyword.lower() in weakness.lower())
-            if count > len(self.feedback_history) * 0.3:  # Appears in >30% of reviews
-                common_issues.append(f"{keyword.title()} issues (mentioned {count} times)")
-        
-        return common_issues
+        json_data = safe_json_parse(response)
+        if json_data and isinstance(json_data, dict):
+            # Extract score (required)
+            result['score'] = float(json_data.get('score')) if json_data.get('score') is not None else None
 
-    # Implementation of BaseAgent abstract methods
-    def gather_information(self):
-        """Gather review criteria and standards"""
-        return self.review_criteria
+            # Store raw data for reference
+            result['raw_data'] = json_data
 
-    def generate_ideas(self):
-        """Reviewer doesn't generate ideas, returns review summary"""
-        return self.get_review_summary([])
+            # Intelligently map criterion-specific fields to strengths/weaknesses/suggestions
+            result['strengths'], result['weaknesses'], result['suggestions'] = \
+                self._map_criterion_fields(json_data, criterion)
 
-    def critique_ideas(self):
-        """Main function - critique/review ideas"""
-        return self.feedback_history
+        return result
 
-    def refine_ideas(self):
-        """Provide refinement suggestions based on reviews"""
-        return [feedback['review_result'].get('suggestions', []) for feedback in self.feedback_history]
+    def _aggregate_assessment(self, stage1_result: Optional[Dict], stage2_result: Optional[Dict]) -> Dict:
+        """Aggregate Stage 1 and Stage 2 into overall assessment using weighted combination."""
+        assessment = {
+            'overall_score': None,
+            'key_strengths': [],
+            'key_weaknesses': [],
+            'actionable_suggestions': []
+        }
+
+        # Get aggregation weights from config
+        agg_config = self.reviewer_config['aggregation']
+        stage1_weight = agg_config['stage1_weight']
+        stage2_weight = agg_config['stage2_weight']
+
+        # Calculate weighted overall score
+        stage1_score = stage1_result.get('overall_score') if stage1_result else None
+        stage2_score = stage2_result.get('overall_detailed_score') if stage2_result else None
+
+        if stage1_score is not None and stage2_score is not None:
+            # Both stages available: weighted combination
+            assessment['overall_score'] = round(stage1_score * stage1_weight + stage2_score * stage2_weight, 2)
+        elif stage2_score is not None:
+            # Only Stage 2 available: use it directly
+            assessment['overall_score'] = stage2_score
+        elif stage1_score is not None:
+            # Only Stage 1 available: use it directly
+            assessment['overall_score'] = stage1_score
+
+        # Collect qualitative feedback (prioritize Stage 2)
+        max_items = self.reviewer_config['aggregation']['max_items_per_criterion']
+        if stage2_result:
+            for _, result in stage2_result.get('criterion_reviews', {}).items():
+                assessment['key_strengths'].extend(result.get('strengths', [])[:max_items])
+                assessment['key_weaknesses'].extend(result.get('weaknesses', [])[:max_items])
+                assessment['actionable_suggestions'].extend(result.get('suggestions', [])[:max_items])
+        elif stage1_result:
+            assessment['key_strengths'] = stage1_result.get('strengths', [])
+            assessment['key_weaknesses'] = stage1_result.get('weaknesses', [])
+            assessment['actionable_suggestions'] = stage1_result.get('suggestions', [])
+
+        return assessment

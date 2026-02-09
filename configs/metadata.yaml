@@ -1,0 +1,19 @@
+# Agent Metadata
+agent_name: "TrustResearcher"
+version: "1.1dev2"
+
+# Logging Configuration
+logging:
+  level: "DEBUG"
+  file: "logs/agent.log"
+
+# UI Configuration
+ui:
+  ports:
+    process: 7860  # Research process UI port
+  startup_delay: 1  # Seconds to wait between launching UIs
+
+# Proofreading Configuration
+proofreading:
+  enabled: true
+ 

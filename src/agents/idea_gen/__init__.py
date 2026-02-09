@@ -1,19 +1,19 @@
 """
 Idea Generation Components
 
-This package contains the reasoning components used by the IdeaGenerator agent:
-- PlanningModule: Coordinates research planning and faceted decomposition
-- FacetedDecomposition: Breaks down complex research topics into structured facets
-- GraphOfThought: Implements graph-based reasoning for idea generation and refinement
+This package contains the reasoning components used by the IdeaGenAgent:
+- PlanningModule: Coordinates research planning and global grounding
+- IdeaGenerator: Central idea generator (base, got, cross-pollination)
 """
 
 from .planning_module import PlanningModule
-from .faceted_decomposition import FacetedDecomposition
-from .graph_of_thought import GraphOfThought, ThoughtNode
+from .idea_generator import IdeaGenerator
+from .research_idea import ResearchIdea
+from .idea_refinement import IdeaRefinement
 
 __all__ = [
     'PlanningModule',
-    'FacetedDecomposition',
-    'GraphOfThought',
-    'ThoughtNode'
+    'IdeaGenerator',
+    'ResearchIdea',
+    'IdeaRefinement',
 ]

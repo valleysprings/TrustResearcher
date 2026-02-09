@@ -1,0 +1,56 @@
+# Idea Generation Configuration
+idea_generation:
+  # Enhanced pipeline parameters
+  overgeneration_factor: 5  # Generate 5x more ideas than requested
+  intermediate_selection_multiplier: 3  # Select 3x requested ideas for detailed review
+  merge_similarity_threshold: 0.85  # Jaccard similarity threshold for merging ideas (high threshold)
+
+  # Variant generation strategy (ratios are multiplied by num_ideas * overgeneration_factor)
+  base_variant_ratio: 0.5           # Base variants: 0.5x overgeneration
+  got_variant_ratio: 0.5            # GoT variants: 0.5x overgeneration
+  pollination_ratio: 0.2            # Cross-pollination: 0.2x overgeneration
+
+  # Iteration and safety limits
+  max_merge_iterations: 20  # Maximum iterations for idea merging
+
+  # Refinement pipeline control
+  enable_self_critique: true        # Enable round 2: self-critique refinement
+  enable_elaboration: false          # Enable round 3: experimental validation elaboration
+
+  # Strategic directions generation
+  strategic_directions_max_tokens: 2000  # Max tokens for strategic directions
+
+  # Literature processing limits
+  literature_summary_papers: 5     # Max papers in summary
+  literature_summary_authors: 3    # Max authors to show
+  literature_abstract_length: 200  # Abstract truncation length
+  literature_keywords: 5           # Max keywords to show
+  common_themes: 10                # Max common themes
+  top_papers_context: 3            # Top papers for context
+  cross_connections: 2             # Max cross-connections
+  hybrid_ideas_limit: 3            # Max hybrid ideas
+
+  # Methodology elaboration
+  methodology_elaboration:
+    enabled: true
+    validation_components: 4
+    async_batch_size: 3
+
+  # Scores
+  default_overall_score: 4.0       # Default critique score
+  default_facet_score: 3           # Default score for novelty/feasibility/clarity/impact
+  critique_weights:
+    novelty: 0.25
+    feasibility: 0.20
+    clarity: 0.20
+    impact: 0.25
+    methodology_soundness: 0.10
+
+  # Processing limits
+  min_ideas_for_cross_poll: 2      # Minimum ideas needed for cross-pollination
+  max_ideas_for_cross_poll: 5      # Maximum ideas to use for cross-pollination
+  hybrid_ideas_final_limit: 1      # Final limit for hybrid ideas
+
+  # Async function limits
+  async_func_max_size: 8           # Max concurrent async function calls
+  expansion_async_max_size: 3      # Max concurrent expansion async calls

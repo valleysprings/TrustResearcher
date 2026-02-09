@@ -1,0 +1,51 @@
+# Reviewer Agent Configuration
+# Two-stage comprehensive peer review system
+
+reviewer:
+  # Stage 1: Preliminary Critique (Fast)
+  stage1_critique:
+    enabled: true
+    # Default scores for fallback
+    default_facet_score: 3.0
+    default_overall_score: 3.0
+    # Async processing
+    async_func_max_size: 2  # Max concurrent critique operations
+
+  # Stage 2: Detailed Per-Criterion Review (Thorough)
+  stage2_detailed:
+    enabled: true
+    # Review criteria with weights (must sum to 1.0)
+    criteria:
+      novelty:
+        weight: 0.30
+        enabled: true
+        description: "Originality and innovation of the approach"
+      feasibility:
+        weight: 0.25
+        enabled: true
+        description: "Technical and practical implementability"
+      clarity:
+        weight: 0.20
+        enabled: true
+        description: "Clear problem definition and methodology"
+      impact:
+        weight: 0.25
+        enabled: true
+        description: "Potential significance and contribution"
+
+    # Weight validation
+    weight_tolerance: 0.01  # Allow small floating point errors
+
+  # Overall assessment aggregation
+  aggregation:
+    # Weights for combining stage1 and stage2 scores
+    stage1_weight: 0.3  # Preliminary critique weight
+    stage2_weight: 0.7  # Detailed review weight
+
+    # Scoring thresholds for quality assessment
+    thresholds:
+      minor_revise: 3.5   # Score >= 3.5 for "Good" quality
+      major_revise: 2.5   # Score >= 2.5 for "Moderate" quality
+
+    # Feedback collection limits
+    max_items_per_criterion: 2  # Max items to collect per criterion for each feedback type
