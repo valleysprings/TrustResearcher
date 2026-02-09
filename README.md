@@ -34,10 +34,10 @@ TrustResearcher integrates a fully literature-aware, multi-agent workflow that b
 
 The research pipeline consists of 5 main phases:
 
-1. **Literature Retrieval** → Semantic Scholar API search to gather relevant papers based on the research topic.
-2. **Idea Generation** → Planning module + literature-informed idea generation with overgeneration for robust filtering.
+1. **Literature Retrieval & Knowledge Graph Construction** → Semantic Scholar API search to gather relevant papers, followed by knowledge graph construction to organize concepts, relationships, and research context.
+2. **Idea Generation** → Planning module generates strategic research directions, followed by two complementary generation approaches (direct generation and variant generation), with preliminary critique for refinement and cross-pollination to enhance idea quality and diversity.
 3. **Preliminary Selection** → Two-stage filtering: (a) External selection against literature for novelty, (b) Internal deduplication and diversity selection.
-4. **Detailed Review** → Two-stage expert review system that evaluates ideas across multiple criteria (novelty, feasibility, impact, clarity).
+4. **Detailed Review** → Multi-criteria expert review evaluating ideas across novelty, feasibility, impact, and clarity dimensions.
 5. **Final Selection** → Score-based ranking and selection of top ideas (≥3.5 threshold) for final output.
 
 ---
@@ -48,8 +48,6 @@ Requirements
 - Python 3.8+
 - Network access for the model API and Semantic Scholar
 - [Optional] Dedicated GPU server for real-time deduplication and KG relationship augmentation (may use preset embedding model)
-
-*Tip: use a virtual environment (venv or conda) to isolate dependencies.*
 
 Install
 ```bash
@@ -99,10 +97,10 @@ python -m src.ui_launcher --process-ui --process-port 7861
 
 ## 📤 Outputs & 📜 Logs
 
-- Results: `outputs/{topic}_{timestamp}.json` with the complete pipeline output.
-- Run logs: `logs/session_YYYYMMDD_HHMMSS.log` (single file per run).
-- LLM logs: `llm_logs/{topic}_{timestamp}.jsonl` (All interaction from agents per run with token & cost stats).
-- Idea logs: `idea_logs/ideas_{timestamp}.json` (all generated ideas for each refinement stage).
+- Results: `outputs/{timestamp}.json` with the complete pipeline output.
+- Run logs: `logs/session/{timestamp}.log` (execution logs for each run).
+- LLM logs: `logs/llm/{timestamp}.jsonl` (all LLM interactions with token & cost stats).
+- Idea logs: `logs/idea/{timestamp}.json` (all generated ideas for each refinement stage).
 
 ---
 
