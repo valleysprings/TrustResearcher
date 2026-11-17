@@ -8,7 +8,7 @@ spacy
 pytest
 pyyaml
 requests
-tokencost
+llm-prices[tokencost]>=1.4.0
 sentence_transformers
 gradio
 httpx[socks]

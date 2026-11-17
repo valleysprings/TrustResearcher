@@ -2,7 +2,7 @@
 """
 Token Cost Tracker for TrustResearcher
 
-Provides precise token counting and cost calculation for LLM invocations using tokencost library.
+Provides precise token counting and cost calculation for LLM invocations using llm-prices (tokencost API).
 Integrates with the existing logging system to track token usage and costs per agent and session.
 """
 
@@ -40,7 +40,7 @@ def suppress_stderr():
 with warnings.catch_warnings(), suppress_stderr():
     warnings.simplefilter("ignore", UserWarning)
     import tiktoken
-    import tokencost
+    from llm_prices.compat import tokencost
 
 # Global token tracking across all agents
 _global_session_stats = {
@@ -51,6 +51,15 @@ _global_session_stats = {
     "agent_stats": {},
     "conversation_count": 0
 }
+
+
+def _has_price(model_name: str) -> bool:
+    """True if the price table resolves model_name (bare, dated or provider-prefixed ids)."""
+    try:
+        tokencost.calculate_cost_by_tokens(1, model_name, "input")
+        return True
+    except KeyError:
+        return False
 
 
 class TokenCostTracker:
@@ -79,15 +88,15 @@ class TokenCostTracker:
                     "token_tracker"
                 )
             self.cost_model = model_name
-        # Validate model is supported by tokencost
-        elif model_name not in tokencost.TOKEN_COSTS:
+        # Validate model is supported by the price table
+        elif not _has_price(model_name):
             # Try to find closest match or use default
             available_models = list(tokencost.TOKEN_COSTS.keys())
             if logger:
-                logger.log_warning(f"Model '{model_name}' not found in tokencost. Available models: {available_models[:10]}...")
+                logger.log_warning(f"Model '{model_name}' not found in llm-prices. Available models: {available_models[:10]}...")
 
-            # Use gpt-4 as fallback for cost calculation
-            self.cost_model = "gpt-4"
+            # Use gpt-4o as fallback for cost calculation
+            self.cost_model = "gpt-4o"
             if logger:
                 logger.log_info(f"Using '{self.cost_model}' for cost calculation as fallback", "token_tracker")
         else:
@@ -151,7 +160,7 @@ class TokenCostTracker:
                 cost_per_million = Decimal(str(self.custom_pricing.get('prompt', 0)))
                 return (Decimal(token_count) * cost_per_million) / Decimal('1000000')
 
-            # Otherwise use tokencost library
+            # Otherwise use the llm-prices table
             with warnings.catch_warnings(), suppress_stderr():
                 warnings.filterwarnings("ignore", message=".*may update over time.*")
                 warnings.filterwarnings("ignore", message=".*Returning num tokens assuming.*")
@@ -182,7 +191,7 @@ class TokenCostTracker:
                 cost_per_million = Decimal(str(self.custom_pricing.get('completion', 0)))
                 return (Decimal(token_count) * cost_per_million) / Decimal('1000000')
 
-            # Otherwise use tokencost library
+            # Otherwise use the llm-prices table
             with warnings.catch_warnings(), suppress_stderr():
                 warnings.filterwarnings("ignore", message=".*may update over time.*")
                 warnings.filterwarnings("ignore", message=".*Returning num tokens assuming.*")
@@ -376,13 +385,13 @@ class TokenCostTracker:
 
 
 def get_available_models() -> List[str]:
-    """Get list of models supported by tokencost"""
+    """Get list of models in the llm-prices table"""
     return list(tokencost.TOKEN_COSTS.keys())
 
 
 def is_model_supported(model_name: str) -> bool:
-    """Check if a model is supported by tokencost"""
-    return model_name in tokencost.TOKEN_COSTS
+    """Check if the llm-prices table prices a model"""
+    return _has_price(model_name)
 
 
 def get_current_token_count() -> int:
