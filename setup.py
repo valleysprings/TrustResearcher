@@ -23,8 +23,8 @@ setup(
         # Core runtime deps used by the codebase
         'aiohttp',                 # async HTTP for LLM + Semantic Scholar
         'gradio',                  # Web UI
-        'tokencost',               # token cost accounting
-        'tiktoken',                # tokenization backend for tokencost
+        'llm-prices[tokencost]>=1.4.0',  # token cost accounting
+        'tiktoken',                # tokenization backend for llm-prices
         'sentence-transformers',   # embedding models for distinctness analysis
     ],
     classifiers=[
